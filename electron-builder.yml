@@ -1,0 +1,24 @@
+appId: com.twosleeps.vob2mp4
+productName: VOB2MP4
+
+directories:
+  output: dist
+
+files:
+  - out/**/*
+  - package.json
+
+# Bundle the FFmpeg/ffprobe binaries fetched by `npm run fetch-ffmpeg`.
+# They land next to the app under <app>/resources/ffmpeg/ at runtime.
+extraResources:
+  - from: resources/ffmpeg
+    to: ffmpeg
+    filter:
+      - "**/*"
+
+win:
+  target:
+    - portable
+
+portable:
+  artifactName: ${productName}-${version}-portable.exe

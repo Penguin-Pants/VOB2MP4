@@ -1,0 +1,97 @@
+:root {
+  --bg: #1b1d23;
+  --panel: #24272f;
+  --text: #e7e9ee;
+  --muted: #9aa1ad;
+  --accent: #5aa0ff;
+  --ok: #54d18c;
+  --bad: #ff6b6b;
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+}
+
+.app {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  padding: 24px 28px;
+}
+
+.app__header h1 {
+  margin: 0;
+  font-size: 28px;
+  letter-spacing: 0.5px;
+}
+
+.app__tagline {
+  margin: 4px 0 20px;
+  color: var(--muted);
+}
+
+.card {
+  background: var(--panel);
+  border: 1px solid #30343d;
+  border-radius: 10px;
+  padding: 18px 20px;
+  max-width: 560px;
+}
+
+.card h2 {
+  margin: 0 0 12px;
+  font-size: 16px;
+  color: var(--accent);
+}
+
+.kv {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.kv li {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 6px 0;
+  border-bottom: 1px solid #2c2f38;
+}
+
+.kv li:last-child {
+  border-bottom: none;
+}
+
+.kv span {
+  color: var(--muted);
+}
+
+code {
+  font-family: "Cascadia Code", Consolas, monospace;
+}
+
+code.ok {
+  color: var(--ok);
+}
+
+code.bad {
+  color: var(--bad);
+}
+
+.status--bad {
+  color: var(--bad);
+}
+
+.app__note {
+  margin-top: 20px;
+  color: var(--muted);
+  font-size: 13px;
+  max-width: 560px;
+}

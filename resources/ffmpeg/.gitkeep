@@ -1,0 +1,2 @@
+# FFmpeg/ffprobe binaries are downloaded here by `npm run fetch-ffmpeg`.
+# They are intentionally NOT committed (large, platform-specific). See scripts/download-ffmpeg.mjs.
