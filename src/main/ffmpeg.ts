@@ -16,10 +16,24 @@ const execFileP = promisify(execFile)
  */
 export function binaryPath(name: 'ffmpeg' | 'ffprobe'): string {
   const exe = process.platform === 'win32' ? `${name}.exe` : name
-  const base = app.isPackaged
-    ? join(process.resourcesPath, 'ffmpeg')
-    : join(app.getAppPath(), 'resources', 'ffmpeg')
-  return join(base, exe)
+  return join(ffmpegDir(), exe)
+}
+
+/**
+ * Resolve the directory holding the bundled FFmpeg binaries.
+ * Order: explicit env override → Electron app paths → cwd fallback (headless).
+ * The env override and headless fallback let the engine run outside Electron
+ * (e.g. in tests / scripts).
+ */
+function ffmpegDir(): string {
+  if (process.env.VOB2MP4_FFMPEG_DIR) return process.env.VOB2MP4_FFMPEG_DIR
+  // `app` is undefined when this module is imported outside an Electron runtime.
+  if (app && typeof app.getAppPath === 'function') {
+    return app.isPackaged
+      ? join(process.resourcesPath, 'ffmpeg')
+      : join(app.getAppPath(), 'resources', 'ffmpeg')
+  }
+  return join(process.cwd(), 'resources', 'ffmpeg')
 }
 
 /** Whether both bundled binaries are present on disk. */

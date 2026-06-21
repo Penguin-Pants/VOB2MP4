@@ -1,17 +1,36 @@
 import { useEffect, useState } from 'react'
+import type { InspectedInput } from '../../shared/types'
+import { InputView } from './InputView'
 
 type AppInfo = Awaited<ReturnType<Window['api']['getInfo']>>
 
 export default function App(): JSX.Element {
   const [info, setInfo] = useState<AppInfo | null>(null)
+  const [input, setInput] = useState<InspectedInput | null>(null)
+  const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    window.api
-      .getInfo()
-      .then(setInfo)
-      .catch((e: unknown) => setError(String(e)))
+    window.api.getInfo().then(setInfo).catch(() => undefined)
   }, [])
+
+  async function open(kind: 'folder' | 'files'): Promise<void> {
+    setError(null)
+    const paths =
+      kind === 'folder' ? await window.api.openFolder() : await window.api.openVobFiles()
+    if (paths.length === 0) return
+    setBusy(true)
+    setInput(null)
+    try {
+      const res = await window.api.inspect(paths)
+      if (res.ok) setInput(res.input)
+      else setError(res.error)
+    } catch (e) {
+      setError(String(e))
+    } finally {
+      setBusy(false)
+    }
+  }
 
   return (
     <div className="app">
@@ -21,45 +40,45 @@ export default function App(): JSX.Element {
       </header>
 
       <main className="app__main">
-        <section className="card">
-          <h2>Build pipeline check (Stage 0)</h2>
-          {error && <p className="status status--bad">Error: {error}</p>}
-          {!info && !error && <p className="status">Loading…</p>}
-          {info && (
-            <ul className="kv">
-              <li>
-                <span>App version</span>
-                <code>{info.appVersion}</code>
-              </li>
-              <li>
-                <span>Electron</span>
-                <code>{info.electronVersion}</code>
-              </li>
-              <li>
-                <span>Platform</span>
-                <code>{info.platform}</code>
-              </li>
-              <li>
-                <span>FFmpeg bundled</span>
-                <code className={info.ffmpegBundled ? 'ok' : 'bad'}>
-                  {info.ffmpegBundled ? 'yes' : 'no'}
-                </code>
-              </li>
-              <li>
-                <span>FFmpeg version</span>
-                <code className={info.ffmpegVersion ? 'ok' : 'bad'}>
-                  {info.ffmpegVersion ?? 'not found'}
-                </code>
-              </li>
-            </ul>
-          )}
+        <section className="toolbar">
+          <button onClick={() => open('folder')} disabled={busy}>
+            Open VIDEO_TS / folder…
+          </button>
+          <button onClick={() => open('files')} disabled={busy}>
+            Open VOB file(s)…
+          </button>
+          {busy && <span className="muted">Inspecting…</span>}
         </section>
 
-        <p className="app__note">
-          This is the Stage 0 skeleton. If the window opens and FFmpeg shows a version, the full
-          build pipeline works. Features (open disc, preview, split, export) come in later stages.
-        </p>
+        {error && <p className="status status--bad">Error: {error}</p>}
+
+        {!input && !busy && !error && (
+          <p className="muted">
+            Open a <strong>VIDEO_TS folder</strong> (lists titles + chapters) or select
+            <strong> loose .VOB files</strong> (grouped into programs) to see what&apos;s inside.
+            Read-only — nothing is changed yet (Stage 1).
+          </p>
+        )}
+
+        {input && (
+          <section className="card">
+            <InputView input={input} />
+          </section>
+        )}
       </main>
+
+      <footer className="app__footer muted small">
+        {info ? (
+          <>
+            v{info.appVersion} · Electron {info.electronVersion} · FFmpeg{' '}
+            <span className={info.ffmpegVersion ? 'ok' : 'bad'}>
+              {info.ffmpegVersion ? 'ready' : 'not found'}
+            </span>
+          </>
+        ) : (
+          'starting…'
+        )}
+      </footer>
     </div>
   )
 }

@@ -1,6 +1,8 @@
-import { app, shell, BrowserWindow, ipcMain } from 'electron'
+import { app, shell, BrowserWindow, ipcMain, dialog } from 'electron'
 import { join } from 'path'
 import { ffmpegVersion, binariesPresent } from './ffmpeg'
+import { inspectPaths } from './inspect'
+import type { InspectResponse } from '../shared/types'
 
 function createWindow(): void {
   const mainWindow = new BrowserWindow({
@@ -42,6 +44,35 @@ ipcMain.handle('app:info', async () => {
     platform: process.platform,
     ffmpegBundled: binariesPresent(),
     ffmpegVersion: await ffmpegVersion()
+  }
+})
+
+// IPC: pick a DVD folder (VIDEO_TS or a folder of loose VOBs).
+ipcMain.handle('dialog:openFolder', async (): Promise<string[]> => {
+  const res = await dialog.showOpenDialog({
+    title: 'Open a VIDEO_TS folder or a folder of VOB files',
+    properties: ['openDirectory']
+  })
+  return res.canceled ? [] : res.filePaths
+})
+
+// IPC: pick one or more loose .VOB files.
+ipcMain.handle('dialog:openVobFiles', async (): Promise<string[]> => {
+  const res = await dialog.showOpenDialog({
+    title: 'Select one or more .VOB files',
+    properties: ['openFile', 'multiSelections'],
+    filters: [{ name: 'DVD video', extensions: ['vob', 'VOB'] }]
+  })
+  return res.canceled ? [] : res.filePaths
+})
+
+// IPC: inspect a selection (read-only) and classify it.
+ipcMain.handle('input:inspect', async (_e, paths: string[]): Promise<InspectResponse> => {
+  try {
+    const input = await inspectPaths(paths)
+    return { ok: true, input }
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : String(err) }
   }
 })
 
