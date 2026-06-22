@@ -1,0 +1,17 @@
+# Dependencies
+node_modules/
+
+# Build output
+out/
+dist/
+
+# Bundled FFmpeg binaries (fetched at build time, not committed)
+resources/ffmpeg/*
+!resources/ffmpeg/.gitkeep
+
+# Logs / env
+*.log
+.env
+.env.*
+.DS_Store
+Thumbs.db
