@@ -1,7 +1,7 @@
 import { execFile } from 'child_process'
 import { promisify } from 'util'
 import { binaryPath } from './ffmpeg'
-import type { MediaStreamInfo, ProbeResult } from '../shared/types'
+import type { DvdChapter, MediaStreamInfo, ProbeResult } from '../shared/types'
 
 const execFileP = promisify(execFile)
 
@@ -18,6 +18,7 @@ export interface RawFfprobe {
     height?: number
     r_frame_rate?: string
     avg_frame_rate?: string
+    field_order?: string
     tags?: Record<string, string>
   }>
   chapters?: Array<{
@@ -37,6 +38,23 @@ export function parseFrameRate(value: string | undefined): number | null {
   const fps = n / d
   return fps > 0 ? fps : null
 }
+
+function toSeconds(v: string | undefined): number {
+  if (!v || v === 'N/A') return 0
+  const n = Number.parseFloat(v)
+  return Number.isFinite(n) ? n : 0
+}
+
+/** Parse ffprobe chapters into our chapter shape. */
+export function parseChapters(raw: RawFfprobe): DvdChapter[] {
+  return (raw.chapters ?? []).map((c, i) => ({
+    index: i + 1,
+    startSec: toSeconds(c.start_time),
+    endSec: toSeconds(c.end_time)
+  }))
+}
+
+const INTERLACED_FIELD_ORDERS = new Set(['tt', 'bb', 'tb', 'bt'])
 
 function streamType(codecType: string | undefined): MediaStreamInfo['type'] {
   switch (codecType) {
@@ -75,17 +93,20 @@ export function parseProbe(raw: RawFfprobe): ProbeResult {
   const frameRate = video
     ? parseFrameRate(video.r_frame_rate) ?? parseFrameRate(video.avg_frame_rate)
     : null
+  const interlaced = video?.field_order != null && INTERLACED_FIELD_ORDERS.has(video.field_order)
 
   return {
     durationSec: durationSec != null && Number.isFinite(durationSec) ? durationSec : null,
     frameRate,
+    interlaced,
+    chapters: parseChapters(raw),
     streams
   }
 }
 
 /**
- * Run ffprobe on a single media file (e.g. one .VOB) and return typed info.
- * Reads format duration + all streams. Chapters are not expected for raw VOBs.
+ * Run ffprobe on a single media file (.VOB, .m4v, .mp4, …) and return typed
+ * info: format duration, streams, interlacing, and any embedded chapters.
  */
 export async function probeFile(file: string): Promise<ProbeResult> {
   const args = [
@@ -94,6 +115,7 @@ export async function probeFile(file: string): Promise<ProbeResult> {
     'error',
     '-show_format',
     '-show_streams',
+    '-show_chapters',
     '-of',
     'json',
     file

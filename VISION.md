@@ -31,7 +31,14 @@ needs to:
 
 ## 4. Inputs
 
-The tool must accept **two kinds of input**:
+> **Update (post-v1):** A third input type is also supported — **standalone video files**
+> (`.m4v`, `.mp4`, `.mkv`, `.mov`, `.avi`, `.ts`, …). Each selected file is treated as **its own
+> disc/program** (not joined). Embedded chapter markers inside the file are auto-detected (for
+> one-click split proposals), and interlacing is detected from `field_order` so deinterlacing
+> defaults on only for genuinely interlaced sources (DVDs) and off for progressive files (`.m4v`).
+> Output is always `.mp4`.
+
+The tool must accept **the following kinds of input**:
 
 1. **Raw `VIDEO_TS` folder** — a full DVD rip containing `VTS_xx_y.VOB` chunks plus `.IFO`/`.BUP`
    companion files. The `.IFO` files contain **title structure and chapter markers**.

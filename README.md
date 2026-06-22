@@ -1,16 +1,24 @@
 # VOB2MP4
 
-A local **Windows desktop app** that converts DVD rips (`.VOB` files / `VIDEO_TS` folders) into
-**MP4** files and **splits long single-file TV-series rips into individual episode MP4s**, using a
-built-in video player and timeline. Powered by **FFmpeg**, all processing is local, offline, and
-private.
+A local **Windows desktop app** that converts DVD rips (`.VOB` files / `VIDEO_TS` folders) **and
+standalone video files (`.m4v`, `.mp4`, `.mkv`, …)** into **MP4** files, and **splits long
+single-file TV-series rips into individual episode MP4s**, using a built-in video player and
+timeline. Powered by **FFmpeg**, all processing is local, offline, and private.
+
+Input handling:
+- **VIDEO_TS folder** — lists titles + chapters.
+- **Loose `.VOB` files** — joined into one program (DVD parts).
+- **Video files (`.m4v`/`.mp4`/…)** — each file is treated as its own disc; embedded chapter
+  markers are auto-detected for one-click split proposals, and interlacing is detected so
+  deinterlacing only kicks in when needed.
 
 See [`VISION.md`](./VISION.md) for the full project vision and the finalized technical decisions.
 
-> **Status:** Feature-complete (Stages 0–7). Workflow: open a VIDEO_TS folder or loose VOBs →
-> preview & scrub → mark split points (manual, chapters, or black-frame scan) → choose tracks /
-> quality / naming → export, or queue many discs and run unattended. Save/reopen projects;
-> last-used settings are remembered. Needs validation on real Windows hardware + discs.
+> **Status:** Feature-complete (Stages 0–7) plus standalone video-file input (`.m4v`/`.mp4`/…).
+> Workflow: open a VIDEO_TS folder, loose VOBs, or video files → preview & scrub → mark split
+> points (manual, chapters, or black-frame scan) → choose tracks / quality / naming → export, or
+> queue many discs and run unattended. Save/reopen projects; last-used settings are remembered.
+> Needs validation on real Windows hardware + discs.
 
 ## Tech stack
 

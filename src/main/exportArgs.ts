@@ -74,6 +74,8 @@ export function buildExportArgs(p: BuildExportArgsParams): string[] {
     args.push('-sn')
   }
 
+  // Don't carry the source's chapter markers into each episode.
+  args.push('-map_chapters', '-1')
   args.push('-movflags', '+faststart', output)
   return args
 }

@@ -52,7 +52,7 @@ export function ExportPanel({
   const [outputDir, setOutputDir] = useState<string | null>(initial?.outputDir ?? null)
   const [mode, setMode] = useState<ConvertMode>(initial?.mode ?? 'reencode')
   const [preset, setPreset] = useState<QualityPreset>(initial?.preset ?? 'balanced')
-  const [deinterlace, setDeinterlace] = useState(initial?.deinterlace ?? true)
+  const [deinterlace, setDeinterlace] = useState(initial?.deinterlace ?? source.interlaced ?? false)
   const [audio, setAudio] = useState<number[]>(
     initial?.audio ?? (audioStreams.length > 0 ? [audioStreams[0].index] : [])
   )

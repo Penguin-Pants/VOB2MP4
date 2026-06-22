@@ -47,3 +47,32 @@ test('parseProbe classifies unknown codec types as other', () => {
   const result = parseProbe({ streams: [{ index: 0, codec_type: 'data', codec_name: 'bin_data' }] })
   assert.equal(result.streams[0].type, 'other')
 })
+
+test('parseProbe detects interlacing from field_order', () => {
+  assert.equal(
+    parseProbe({ streams: [{ index: 0, codec_type: 'video', field_order: 'tt' }] }).interlaced,
+    true
+  )
+  assert.equal(
+    parseProbe({ streams: [{ index: 0, codec_type: 'video', field_order: 'progressive' }] })
+      .interlaced,
+    false
+  )
+  // absent field_order → treated as progressive
+  assert.equal(
+    parseProbe({ streams: [{ index: 0, codec_type: 'video' }] }).interlaced,
+    false
+  )
+})
+
+test('parseProbe extracts embedded chapters', () => {
+  const result = parseProbe({
+    chapters: [
+      { id: 0, start_time: '0.000', end_time: '1325.000' },
+      { id: 1, start_time: '1325.000', end_time: '2650.000' }
+    ]
+  })
+  assert.equal(result.chapters.length, 2)
+  assert.deepEqual(result.chapters[0], { index: 1, startSec: 0, endSec: 1325 })
+  assert.equal(result.chapters[1].startSec, 1325)
+})

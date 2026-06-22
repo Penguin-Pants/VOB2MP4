@@ -13,10 +13,11 @@ import type { ExportInitial } from './ExportPanel'
 
 function initialFromSettings(le: LastExportSettings | undefined): ExportInitial | undefined {
   if (!le) return undefined
+  // Note: `deinterlace` is intentionally not restored from settings — it
+  // defaults from the loaded source's actual interlacing instead.
   return {
     mode: le.mode,
     preset: le.preset,
-    deinterlace: le.deinterlace,
     showName: le.showName,
     season: le.season,
     startEpisode: le.startEpisode,
@@ -81,10 +82,14 @@ export default function App(): JSX.Element {
 
   const queueRunning = queue.some((j) => j.status === 'running')
 
-  async function open(kind: 'folder' | 'files'): Promise<void> {
+  async function open(kind: 'folder' | 'files' | 'media'): Promise<void> {
     setError(null)
     const paths =
-      kind === 'folder' ? await window.api.openFolder() : await window.api.openVobFiles()
+      kind === 'folder'
+        ? await window.api.openFolder()
+        : kind === 'media'
+          ? await window.api.openMediaFiles()
+          : await window.api.openVobFiles()
     if (paths.length === 0) return
     setBusy(true)
     setInput(null)
@@ -133,6 +138,9 @@ export default function App(): JSX.Element {
               <button onClick={() => open('files')} disabled={busy}>
                 Open VOB file(s)…
               </button>
+              <button onClick={() => open('media')} disabled={busy}>
+                Open video file(s)…
+              </button>
               <button className="ghost" onClick={openProject} disabled={busy}>
                 Open project…
               </button>
@@ -143,9 +151,10 @@ export default function App(): JSX.Element {
 
             {!input && !busy && !error && (
               <p className="muted">
-                Open a <strong>VIDEO_TS folder</strong> (lists titles + chapters) or select
-                <strong> loose .VOB files</strong> (grouped into programs) to see what&apos;s
-                inside, then load a program to preview and scrub it.
+                Open a <strong>VIDEO_TS folder</strong> (lists titles + chapters), select
+                <strong> loose .VOB files</strong> (joined into one program), or open
+                <strong> video files like .m4v/.mp4</strong> (each treated as its own disc). Then
+                load a program to preview, split, and export.
               </p>
             )}
 

@@ -23,6 +23,56 @@ export function naturalCompare(a: string, b: string): number {
   return a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' })
 }
 
+/** Lower-cased file extension without the dot (e.g. "m4v"), or "". */
+export function extOf(name: string): string {
+  const base = basename(name)
+  const idx = base.lastIndexOf('.')
+  return idx >= 0 ? base.slice(idx + 1).toLowerCase() : ''
+}
+
+/** Single-file video containers handled as one-program-per-file (not joined). */
+export const MEDIA_EXTENSIONS = new Set([
+  'm4v',
+  'mp4',
+  'mkv',
+  'mov',
+  'avi',
+  'm2ts',
+  'mts',
+  'ts',
+  'mpg',
+  'mpeg',
+  'wmv',
+  'webm'
+])
+
+export function isVobFile(name: string): boolean {
+  return extOf(name) === 'vob'
+}
+
+export function isMediaFile(name: string): boolean {
+  return MEDIA_EXTENSIONS.has(extOf(name))
+}
+
+/** Strip the extension from a basename, for use as a default label/show name. */
+export function stripExt(name: string): string {
+  const base = basename(name)
+  const idx = base.lastIndexOf('.')
+  return idx > 0 ? base.slice(0, idx) : base
+}
+
+/**
+ * Group standalone media files (.m4v, .mp4, …). Each file is its own program
+ * (one disc per file), unlike VOB parts which are joined.
+ */
+export function groupMediaFiles(paths: string[]): VobGroup[] {
+  return [...paths].sort(naturalCompare).map((p) => ({
+    id: `media:${basename(p)}`,
+    label: stripExt(p),
+    files: [p]
+  }))
+}
+
 /**
  * Whether a directory's entry names look like a DVD video structure
  * (contains a VIDEO_TS folder, or DVD .IFO/.VOB files directly).
