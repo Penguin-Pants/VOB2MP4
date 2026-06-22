@@ -52,7 +52,14 @@ export function ExportPanel({
   const [outputDir, setOutputDir] = useState<string | null>(initial?.outputDir ?? null)
   const [mode, setMode] = useState<ConvertMode>(initial?.mode ?? 'reencode')
   const [preset, setPreset] = useState<QualityPreset>(initial?.preset ?? 'balanced')
-  const [deinterlace, setDeinterlace] = useState(initial?.deinterlace ?? true)
+  // Default deinterlacing on for DVD/MPEG-2 sources (safe even when field_order
+  // is unreported) and for any explicitly-interlaced source; off for
+  // progressive files like .m4v/.mp4.
+  const dvdLike =
+    source.kind === 'dvd' ||
+    source.streams.find((s) => s.type === 'video')?.codec === 'mpeg2video'
+  const deinterlaceDefault = dvdLike || (source.interlaced ?? false)
+  const [deinterlace, setDeinterlace] = useState(initial?.deinterlace ?? deinterlaceDefault)
   const [audio, setAudio] = useState<number[]>(
     initial?.audio ?? (audioStreams.length > 0 ? [audioStreams[0].index] : [])
   )
@@ -87,7 +94,6 @@ export function ExportPanel({
       lastExport: {
         mode,
         preset,
-        deinterlace,
         outputDir: outputDir ?? '',
         showName: showName.trim(),
         season,

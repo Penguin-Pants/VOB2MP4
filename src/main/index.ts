@@ -83,6 +83,19 @@ ipcMain.handle('dialog:openVobFiles', async (): Promise<string[]> => {
   return res.canceled ? [] : res.filePaths
 })
 
+// IPC: pick one or more video files (.m4v/.mp4/…); each is its own program.
+ipcMain.handle('dialog:openMediaFiles', async (): Promise<string[]> => {
+  const res = await dialog.showOpenDialog({
+    title: 'Select one or more video files (each is its own disc)',
+    properties: ['openFile', 'multiSelections'],
+    filters: [
+      { name: 'Video files', extensions: ['m4v', 'mp4', 'mkv', 'mov', 'avi', 'm2ts', 'mts', 'ts', 'mpg', 'mpeg', 'wmv', 'webm'] },
+      { name: 'All files', extensions: ['*'] }
+    ]
+  })
+  return res.canceled ? [] : res.filePaths
+})
+
 // IPC: inspect a selection (read-only) and classify it.
 ipcMain.handle('input:inspect', async (_e, paths: string[]): Promise<InspectResponse> => {
   try {

@@ -2,20 +2,26 @@ import { stat, readdir } from 'fs/promises'
 import { join, basename as pathBasename } from 'path'
 import { probeFile } from './ffprobe'
 import { readDvdTitles } from './dvd'
-import { groupVobFiles, looksLikeVideoTs } from './input'
-import type {
-  InspectedInput,
-  ProbeResult,
-  VobGroupInspected,
-  VobGroup
-} from '../shared/types'
+import { groupVobFiles, groupMediaFiles, isMediaFile, isVobFile, looksLikeVideoTs } from './input'
+import type { InspectedInput, ProbeResult, VobGroupInspected, VobGroup } from '../shared/types'
 
-/** Recursively does nothing fancy — just lists .VOB files directly in a dir. */
-async function listVobsInDir(dir: string): Promise<string[]> {
+/** List the VOB and standalone-media files directly inside a directory. */
+async function listDirFiles(dir: string): Promise<{ vobs: string[]; media: string[] }> {
   const entries = await readdir(dir, { withFileTypes: true })
-  return entries
-    .filter((e) => e.isFile() && /\.vob$/i.test(e.name))
-    .map((e) => join(dir, e.name))
+  const vobs: string[] = []
+  const media: string[] = []
+  for (const e of entries) {
+    if (!e.isFile()) continue
+    const full = join(dir, e.name)
+    if (isVobFile(e.name)) vobs.push(full)
+    else if (isMediaFile(e.name)) media.push(full)
+  }
+  return { vobs, media }
+}
+
+/** Build programs: VOB parts are joined by title set; media files stand alone. */
+function buildGroups(vobs: string[], media: string[]): VobGroup[] {
+  return [...groupVobFiles(vobs), ...groupMediaFiles(media)]
 }
 
 /** Locate the VIDEO_TS folder for a selected directory, or null. */
@@ -30,7 +36,7 @@ async function findVideoTsDir(dir: string): Promise<string | null> {
   return null
 }
 
-/** Probe a loose-VOB group: streams from the first file, durations per file. */
+/** Probe a program group: streams/chapters from the first file, durations per file. */
 async function inspectGroup(group: VobGroup): Promise<VobGroupInspected> {
   let firstProbe: ProbeResult | null = null
   let totalBytes = 0
@@ -47,7 +53,7 @@ async function inspectGroup(group: VobGroup): Promise<VobGroupInspected> {
       if (!firstProbe) firstProbe = probe
       fileDurations.push(probe.durationSec ?? 0)
     } catch {
-      // A single unreadable VOB shouldn't break inspection of the whole group.
+      // A single unreadable file shouldn't break inspection of the whole group.
       fileDurations.push(0)
     }
   }
@@ -61,6 +67,8 @@ async function inspectGroup(group: VobGroup): Promise<VobGroupInspected> {
     probe: {
       durationSec: durationSec || (firstProbe?.durationSec ?? null),
       frameRate: firstProbe?.frameRate ?? null,
+      interlaced: firstProbe?.interlaced ?? false,
+      chapters: firstProbe?.chapters ?? [],
       streams: firstProbe?.streams ?? []
     }
   }
@@ -68,12 +76,13 @@ async function inspectGroup(group: VobGroup): Promise<VobGroupInspected> {
 
 /**
  * Inspect a user selection (one or more files/folders) and classify it as a
- * VIDEO_TS disc (with titles/chapters) or a set of loose VOB programs.
+ * VIDEO_TS disc (with titles/chapters) or a set of file-based programs
+ * (joined VOB parts and/or standalone media files like .m4v/.mp4).
  */
 export async function inspectPaths(paths: string[]): Promise<InspectedInput> {
   if (paths.length === 0) throw new Error('Nothing selected.')
 
-  // Single directory → could be a VIDEO_TS disc or a folder of loose VOBs.
+  // Single directory → a VIDEO_TS disc, or a folder of video files.
   if (paths.length === 1) {
     const only = paths[0]
     const info = await stat(only)
@@ -84,36 +93,39 @@ export async function inspectPaths(paths: string[]): Promise<InspectedInput> {
         if (titles.length > 0) {
           return { kind: 'video_ts', videoTsPath: videoTs, titles }
         }
-        // Fall back to treating the VIDEO_TS folder's VOBs as loose files.
-        const vobs = await listVobsInDir(videoTs)
-        return {
-          kind: 'vob_files',
-          groups: await Promise.all(groupVobFiles(vobs).map(inspectGroup))
-        }
+        // Fall back to treating the folder's files as programs.
+        const { vobs, media } = await listDirFiles(videoTs)
+        const groups = buildGroups(vobs, media)
+        if (groups.length === 0) throw new Error('No video files found in that folder.')
+        return { kind: 'vob_files', groups: await Promise.all(groups.map(inspectGroup)) }
       }
-      const vobs = await listVobsInDir(only)
-      if (vobs.length === 0) throw new Error('No .VOB files or VIDEO_TS found in that folder.')
-      return {
-        kind: 'vob_files',
-        groups: await Promise.all(groupVobFiles(vobs).map(inspectGroup))
+      const { vobs, media } = await listDirFiles(only)
+      const groups = buildGroups(vobs, media)
+      if (groups.length === 0) {
+        throw new Error('No video files or VIDEO_TS found in that folder.')
       }
+      return { kind: 'vob_files', groups: await Promise.all(groups.map(inspectGroup)) }
     }
+    // A single file falls through to the collection block below.
   }
 
-  // One or more files (and possibly dirs): collect .VOB files and group them.
-  const files: string[] = []
+  // One or more files (and possibly dirs): collect and group them.
+  const vobs: string[] = []
+  const media: string[] = []
   for (const p of paths) {
     const info = await stat(p)
     if (info.isDirectory()) {
-      files.push(...(await listVobsInDir(p)))
-    } else if (/\.vob$/i.test(p)) {
-      files.push(p)
+      const r = await listDirFiles(p)
+      vobs.push(...r.vobs)
+      media.push(...r.media)
+    } else if (isVobFile(p)) {
+      vobs.push(p)
+    } else if (isMediaFile(p)) {
+      media.push(p)
     }
   }
-  if (files.length === 0) throw new Error('No .VOB files in the selection.')
+  const groups = buildGroups(vobs, media)
+  if (groups.length === 0) throw new Error('No supported video files in the selection.')
 
-  return {
-    kind: 'vob_files',
-    groups: await Promise.all(groupVobFiles(files).map(inspectGroup))
-  }
+  return { kind: 'vob_files', groups: await Promise.all(groups.map(inspectGroup)) }
 }

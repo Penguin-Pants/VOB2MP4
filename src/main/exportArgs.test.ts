@@ -40,6 +40,7 @@ test('re-encode uses input -ss seek, -t duration, libx264 and aac', () => {
   assert.ok(joined.includes('-c:a aac'))
   assert.ok(joined.includes('-map 0:1'))
   assert.ok(joined.includes('+faststart'))
+  assert.ok(joined.includes('-map_chapters -1')) // don't carry source chapters
 })
 
 test('copy mode copies streams and skips re-encode/subtitles', () => {

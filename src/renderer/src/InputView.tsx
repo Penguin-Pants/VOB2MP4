@@ -78,6 +78,7 @@ function VideoTsView({
                   label: `Title #${selected.id}`,
                   durationSec: selected.durationSec,
                   frameRate: selected.frameRate,
+                  interlaced: selected.interlaced,
                   chapterStarts: selected.chapters.map((c) => c.startSec).filter((t) => t > 0),
                   streams: selected.streams,
                   videoTsPath: input.videoTsPath,
@@ -104,42 +105,49 @@ function VobFilesView({
 }): JSX.Element {
   return (
     <div>
-      <p className="muted small">Loose VOB files · grouped into programs (no chapter data)</p>
-      {input.groups.map((g) => (
-        <div className="card card--nested" key={g.id}>
-          <div className="group__head">
-            <strong>{g.label}</strong>
-            <span className="muted small">
-              {formatDuration(g.probe.durationSec)} · {formatBytes(g.totalBytes)}
-            </span>
+      <p className="muted small">Programs · load one to preview, split, and export</p>
+      {input.groups.map((g) => {
+        const chapterCount = g.probe.chapters.length
+        return (
+          <div className="card card--nested" key={g.id}>
+            <div className="group__head">
+              <strong>{g.label}</strong>
+              <span className="muted small">
+                {formatDuration(g.probe.durationSec)} · {formatBytes(g.totalBytes)}
+                {chapterCount > 0 && ` · ${chapterCount} chapters`}
+                {g.probe.interlaced && ' · interlaced'}
+              </span>
+            </div>
+            <ol className="files">
+              {g.files.map((f) => (
+                <li key={f}>
+                  <code>{f}</code>
+                </li>
+              ))}
+            </ol>
+            <Tracks streams={g.probe.streams} />
+            <div className="group__actions">
+              <button
+                onClick={() =>
+                  onLoad({
+                    kind: 'files',
+                    label: g.label,
+                    durationSec: g.probe.durationSec ?? 0,
+                    frameRate: g.probe.frameRate,
+                    interlaced: g.probe.interlaced,
+                    chapterStarts: g.probe.chapters.map((c) => c.startSec).filter((t) => t > 0),
+                    streams: g.probe.streams,
+                    files: g.files,
+                    fileDurations: g.fileDurations
+                  })
+                }
+              >
+                Load in preview →
+              </button>
+            </div>
           </div>
-          <ol className="files">
-            {g.files.map((f) => (
-              <li key={f}>
-                <code>{f}</code>
-              </li>
-            ))}
-          </ol>
-          <Tracks streams={g.probe.streams} />
-          <div className="group__actions">
-            <button
-              onClick={() =>
-                onLoad({
-                  kind: 'files',
-                  label: g.label,
-                  durationSec: g.probe.durationSec ?? 0,
-                  frameRate: g.probe.frameRate,
-                  streams: g.probe.streams,
-                  files: g.files,
-                  fileDurations: g.fileDurations
-                })
-              }
-            >
-              Load in preview →
-            </button>
-          </div>
-        </div>
-      ))}
+        )
+      })}
     </div>
   )
 }

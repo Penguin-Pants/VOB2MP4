@@ -24,6 +24,13 @@ export async function resolveInput(
       cleanup: async () => undefined
     }
   }
+  // Single-file program: use the file directly. The concat demuxer mishandles
+  // input seeking far from a keyframe (it drops the video stream), which is
+  // common for H.264 .m4v/.mp4 files that have sparse keyframes.
+  if (source.files.length === 1) {
+    return { inputArgs: [], input: source.files[0], cleanup: async () => undefined }
+  }
+  // Multiple files (joined VOB parts): concat demuxer.
   const listPath = join(tmpdir(), `vob2mp4-concat-${Date.now()}.txt`)
   await writeFile(listPath, source.files.map(concatLine).join('\n'), 'utf8')
   return {

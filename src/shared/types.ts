@@ -22,6 +22,10 @@ export interface ProbeResult {
   durationSec: number | null
   /** Frames per second of the primary video stream, or null if unknown. */
   frameRate: number | null
+  /** Whether the primary video stream is interlaced (from field_order). */
+  interlaced: boolean
+  /** Embedded chapter markers, if any (e.g. from an .m4v/.mp4 chapter track). */
+  chapters: DvdChapter[]
   streams: MediaStreamInfo[]
 }
 
@@ -57,6 +61,7 @@ export interface DvdTitle {
   id: number
   durationSec: number
   frameRate: number | null
+  interlaced: boolean
   chapterCount: number
   chapters: DvdChapter[]
   streams: MediaStreamInfo[]
@@ -95,6 +100,8 @@ export type PreviewSource = {
   frameRate: number | null
   /** Chapter start times (seconds) if known, for auto-proposing splits. */
   chapterStarts?: number[]
+  /** Whether the source is interlaced (drives the deinterlace default). */
+  interlaced?: boolean
   /** The program's streams, for choosing audio/subtitle tracks on export. */
   streams: MediaStreamInfo[]
 } & (
@@ -156,11 +163,14 @@ export interface ProjectFile {
   naming: NamingOptions
 }
 
-/** Export defaults remembered between sessions to pre-fill the next job. */
+/**
+ * Export defaults remembered between sessions to pre-fill the next job.
+ * Note: deinterlacing is intentionally NOT remembered — it is derived from the
+ * loaded source's codec/interlacing instead.
+ */
 export interface LastExportSettings {
   mode: ConvertMode
   preset: QualityPreset
-  deinterlace: boolean
   outputDir: string
   showName: string
   season: number

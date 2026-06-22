@@ -28,6 +28,8 @@ const api = {
   openFolder: (): Promise<string[]> => ipcRenderer.invoke('dialog:openFolder'),
   /** Open a multi-select .VOB file picker; returns paths (empty if cancelled). */
   openVobFiles: (): Promise<string[]> => ipcRenderer.invoke('dialog:openVobFiles'),
+  /** Open a multi-select video-file picker (.m4v/.mp4/…); each is its own program. */
+  openMediaFiles: (): Promise<string[]> => ipcRenderer.invoke('dialog:openMediaFiles'),
   /** Inspect a selection read-only and classify it (VIDEO_TS vs loose VOBs). */
   inspect: (paths: string[]): Promise<InspectResponse> =>
     ipcRenderer.invoke('input:inspect', paths),

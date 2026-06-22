@@ -6,7 +6,6 @@ import type { LastExportSettings } from '../shared/types'
 const le: LastExportSettings = {
   mode: 'reencode',
   preset: 'balanced',
-  deinterlace: true,
   outputDir: '/out',
   showName: 'Show',
   season: 1,

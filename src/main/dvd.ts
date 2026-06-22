@@ -3,26 +3,12 @@ import { promisify } from 'util'
 import { dirname } from 'path'
 import { binaryPath } from './ffmpeg'
 import { parseProbe, type RawFfprobe } from './ffprobe'
-import type { DvdChapter, DvdTitle } from '../shared/types'
+import type { DvdTitle } from '../shared/types'
 
 const execFileP = promisify(execFile)
 
 const MAX_TITLES = 99
 const MAX_CONSECUTIVE_MISSES = 3
-
-function toSeconds(v: string | undefined): number {
-  if (!v || v === 'N/A') return 0
-  const n = Number.parseFloat(v)
-  return Number.isFinite(n) ? n : 0
-}
-
-function parseChapters(raw: RawFfprobe): DvdChapter[] {
-  return (raw.chapters ?? []).map((c, i) => ({
-    index: i + 1,
-    startSec: toSeconds(c.start_time),
-    endSec: toSeconds(c.end_time)
-  }))
-}
 
 /**
  * Probe a single DVD title via FFmpeg's dvdvideo demuxer.
@@ -52,13 +38,13 @@ export async function probeDvdTitle(discRoot: string, title: number): Promise<Dv
     const raw = JSON.parse(stdout) as RawFfprobe
     const probe = parseProbe(raw)
     if (!probe.durationSec && probe.streams.length === 0) return null
-    const chapters = parseChapters(raw)
     return {
       id: title,
       durationSec: probe.durationSec ?? 0,
       frameRate: probe.frameRate,
-      chapterCount: chapters.length,
-      chapters,
+      interlaced: probe.interlaced,
+      chapterCount: probe.chapters.length,
+      chapters: probe.chapters,
       streams: probe.streams
     }
   } catch {
