@@ -95,10 +95,57 @@ export type PreviewSource = {
   frameRate: number | null
   /** Chapter start times (seconds) if known, for auto-proposing splits. */
   chapterStarts?: number[]
+  /** The program's streams, for choosing audio/subtitle tracks on export. */
+  streams: MediaStreamInfo[]
 } & (
   | { kind: 'files'; files: string[]; fileDurations: number[] }
   | { kind: 'dvd'; videoTsPath: string; title: number }
 )
+
+export type ConvertMode = 'reencode' | 'copy'
+export type QualityPreset = 'high' | 'balanced' | 'smaller'
+
+export interface ExportOptions {
+  mode: ConvertMode
+  preset: QualityPreset
+  deinterlace: boolean
+  /** Absolute ffprobe stream indices of audio tracks to keep (in order). */
+  audioStreamIndices: number[]
+  /** 0-based index among subtitle streams to burn in, or null for none. */
+  burnSubtitleOrdinal: number | null
+}
+
+export interface NamingOptions {
+  showName: string
+  season: number
+  startEpisode: number
+  /** Directory the Season folder + episodes are written under. */
+  outputDir: string
+}
+
+export interface ExportRequest {
+  source: PreviewSource
+  splitPoints: number[]
+  options: ExportOptions
+  naming: NamingOptions
+}
+
+/** Progress event emitted while exporting (one per update). */
+export interface ExportProgress {
+  episodeIndex: number
+  totalEpisodes: number
+  episodeName: string
+  /** 0..1 for the current episode. */
+  fraction: number
+  status: 'running' | 'done' | 'error'
+  error?: string
+}
+
+export interface ExportResult {
+  ok: boolean
+  outputs: string[]
+  error?: string
+}
 
 /** Result of a single frame extraction (JPEG as a data URL). */
 export type FrameResult =

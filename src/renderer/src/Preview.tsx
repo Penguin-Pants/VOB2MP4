@@ -3,6 +3,7 @@ import type { FilmstripThumb, PreviewSource } from '../../shared/types'
 import { clampSplitMove, normalizeSplitPoints, segmentsFromSplits } from '../../shared/segments'
 import { formatDuration, parseTimecode } from './format'
 import { TimelineTrack } from './TimelineTrack'
+import { ExportPanel } from './ExportPanel'
 
 const FILMSTRIP_COUNT = 16
 const SCRUB_DEBOUNCE_MS = 90
@@ -270,6 +271,12 @@ export function Preview({
           </div>
         </div>
       </div>
+
+      <ExportPanel
+        key={`${source.kind}:${source.label}:${source.durationSec}`}
+        source={source}
+        splitPoints={splitPoints}
+      />
     </div>
   )
 }

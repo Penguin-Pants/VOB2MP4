@@ -1,5 +1,13 @@
 import { contextBridge, ipcRenderer } from 'electron'
-import type { FilmstripThumb, FrameResult, InspectResponse, PreviewSource } from '../shared/types'
+import type {
+  ExportProgress,
+  ExportRequest,
+  ExportResult,
+  FilmstripThumb,
+  FrameResult,
+  InspectResponse,
+  PreviewSource
+} from '../shared/types'
 
 export interface AppInfo {
   appVersion: string
@@ -24,7 +32,17 @@ const api = {
     ipcRenderer.invoke('preview:frame', source, timeSec, accurate),
   /** Generate `count` evenly-spaced filmstrip thumbnails for the program. */
   getFilmstrip: (source: PreviewSource, count: number): Promise<FilmstripThumb[]> =>
-    ipcRenderer.invoke('preview:filmstrip', source, count)
+    ipcRenderer.invoke('preview:filmstrip', source, count),
+  /** Pick an output directory; returns the path or null if cancelled. */
+  chooseOutputDir: (): Promise<string | null> => ipcRenderer.invoke('dialog:chooseOutputDir'),
+  /** Run an export of all episode segments; resolves when finished. */
+  runExport: (req: ExportRequest): Promise<ExportResult> => ipcRenderer.invoke('export:run', req),
+  /** Subscribe to export progress events. Returns an unsubscribe function. */
+  onExportProgress: (cb: (p: ExportProgress) => void): (() => void) => {
+    const listener = (_e: unknown, p: ExportProgress): void => cb(p)
+    ipcRenderer.on('export:progress', listener)
+    return () => ipcRenderer.removeListener('export:progress', listener)
+  }
 }
 
 contextBridge.exposeInMainWorld('api', api)

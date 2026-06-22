@@ -79,6 +79,7 @@ function VideoTsView({
                   durationSec: selected.durationSec,
                   frameRate: selected.frameRate,
                   chapterStarts: selected.chapters.map((c) => c.startSec).filter((t) => t > 0),
+                  streams: selected.streams,
                   videoTsPath: input.videoTsPath,
                   title: selected.id
                 })
@@ -128,6 +129,7 @@ function VobFilesView({
                   label: g.label,
                   durationSec: g.probe.durationSec ?? 0,
                   frameRate: g.probe.frameRate,
+                  streams: g.probe.streams,
                   files: g.files,
                   fileDurations: g.fileDurations
                 })

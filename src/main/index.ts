@@ -3,7 +3,15 @@ import { join } from 'path'
 import { ffmpegVersion, binariesPresent } from './ffmpeg'
 import { inspectPaths } from './inspect'
 import { extractFrame, generateFilmstrip } from './preview'
-import type { FilmstripThumb, FrameResult, InspectResponse, PreviewSource } from '../shared/types'
+import { runExport } from './export'
+import type {
+  ExportRequest,
+  ExportResult,
+  FilmstripThumb,
+  FrameResult,
+  InspectResponse,
+  PreviewSource
+} from '../shared/types'
 
 function createWindow(): void {
   const mainWindow = new BrowserWindow({
@@ -90,6 +98,20 @@ ipcMain.handle(
   (_e, source: PreviewSource, count: number): Promise<FilmstripThumb[]> =>
     generateFilmstrip(source, count)
 )
+
+// IPC: choose an output directory for exported episodes.
+ipcMain.handle('dialog:chooseOutputDir', async (): Promise<string | null> => {
+  const res = await dialog.showOpenDialog({
+    title: 'Choose output folder (a Season folder is created inside)',
+    properties: ['openDirectory', 'createDirectory']
+  })
+  return res.canceled || res.filePaths.length === 0 ? null : res.filePaths[0]
+})
+
+// IPC: run an export, streaming progress back to the requesting window.
+ipcMain.handle('export:run', (e, req: ExportRequest): Promise<ExportResult> => {
+  return runExport(req, (p) => e.sender.send('export:progress', p))
+})
 
 app.whenReady().then(() => {
   createWindow()

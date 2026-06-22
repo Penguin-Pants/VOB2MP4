@@ -362,3 +362,82 @@ button.ghost:hover {
 .seglist code {
   flex: 1;
 }
+
+/* Export panel */
+.export h4 {
+  margin-top: 0;
+}
+.export__grid {
+  display: grid;
+  grid-template-columns: 2fr 1fr 1fr;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+.export__row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  margin: 8px 0;
+}
+.export label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 13px;
+  color: var(--muted);
+}
+.export input[type='text'],
+.export input[type='number'],
+.export input:not([type]),
+.export select {
+  background: var(--panel2);
+  border: 1px solid #3a4150;
+  border-radius: 6px;
+  color: var(--text);
+  padding: 6px 8px;
+  font-size: 14px;
+}
+.export__check {
+  flex-direction: row;
+  align-items: center;
+  gap: 6px;
+  color: var(--text);
+}
+.export__modes {
+  border: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  gap: 18px;
+}
+.export__modes label {
+  flex-direction: row;
+  align-items: center;
+  gap: 6px;
+  color: var(--text);
+}
+.export__tracks {
+  align-items: flex-start;
+  gap: 32px;
+}
+.export__tracks > div {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.export__progress {
+  margin-top: 8px;
+}
+.bar {
+  height: 8px;
+  background: #14161b;
+  border: 1px solid #30343d;
+  border-radius: 5px;
+  overflow: hidden;
+}
+.bar__fill {
+  height: 100%;
+  background: var(--accent);
+  transition: width 0.2s ease;
+}
