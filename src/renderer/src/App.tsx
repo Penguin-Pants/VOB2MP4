@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
-import type { InspectedInput, PreviewSource } from '../../shared/types'
+import type { InspectedInput, PreviewSource, QueueJobView } from '../../shared/types'
 import { InputView } from './InputView'
 import { Preview } from './Preview'
+import { QueueView } from './QueueView'
 
 type AppInfo = Awaited<ReturnType<Window['api']['getInfo']>>
 
@@ -12,6 +13,8 @@ export default function App(): JSX.Element {
   const [splitPoints, setSplitPoints] = useState<number[]>([])
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [queue, setQueue] = useState<QueueJobView[]>([])
+  const [showQueue, setShowQueue] = useState(false)
 
   function loadSource(src: PreviewSource): void {
     setSplitPoints([])
@@ -20,7 +23,11 @@ export default function App(): JSX.Element {
 
   useEffect(() => {
     window.api.getInfo().then(setInfo).catch(() => undefined)
+    window.api.queueList().then(setQueue).catch(() => undefined)
+    return window.api.onQueueUpdate(setQueue)
   }, [])
+
+  const queueRunning = queue.some((j) => j.status === 'running')
 
   async function open(kind: 'folder' | 'files'): Promise<void> {
     setError(null)
@@ -43,12 +50,20 @@ export default function App(): JSX.Element {
   return (
     <div className="app">
       <header className="app__header">
-        <h1>VOB2MP4</h1>
-        <p className="app__tagline">Convert &amp; split DVD rips into per-episode MP4s</p>
+        <div>
+          <h1>VOB2MP4</h1>
+          <p className="app__tagline">Convert &amp; split DVD rips into per-episode MP4s</p>
+        </div>
+        <button className="ghost app__queuebtn" onClick={() => setShowQueue((s) => !s)}>
+          {showQueue ? 'Close queue' : `Queue (${queue.length})`}
+          {queueRunning && ' ⏳'}
+        </button>
       </header>
 
       <main className="app__main">
-        {source ? (
+        {showQueue ? (
+          <QueueView jobs={queue} onBack={() => setShowQueue(false)} />
+        ) : source ? (
           <Preview
             source={source}
             onBack={() => setSource(null)}

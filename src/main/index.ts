@@ -4,13 +4,15 @@ import { ffmpegVersion, binariesPresent } from './ffmpeg'
 import { inspectPaths } from './inspect'
 import { extractFrame, generateFilmstrip } from './preview'
 import { runExport } from './export'
+import { addJob, clearFinished, listJobs, removeJob, runQueue } from './queue'
 import type {
   ExportRequest,
   ExportResult,
   FilmstripThumb,
   FrameResult,
   InspectResponse,
-  PreviewSource
+  PreviewSource,
+  QueueJobView
 } from '../shared/types'
 
 function createWindow(): void {
@@ -111,6 +113,16 @@ ipcMain.handle('dialog:chooseOutputDir', async (): Promise<string | null> => {
 // IPC: run an export, streaming progress back to the requesting window.
 ipcMain.handle('export:run', (e, req: ExportRequest): Promise<ExportResult> => {
   return runExport(req, (p) => e.sender.send('export:progress', p))
+})
+
+// IPC: batch queue management (updates broadcast via 'queue:update').
+ipcMain.handle('queue:add', (_e, req: ExportRequest): QueueJobView[] => addJob(req))
+ipcMain.handle('queue:remove', (_e, id: string): QueueJobView[] => removeJob(id))
+ipcMain.handle('queue:clear', (): QueueJobView[] => clearFinished())
+ipcMain.handle('queue:list', (): QueueJobView[] => listJobs())
+ipcMain.handle('queue:run', (): QueueJobView[] => {
+  void runQueue()
+  return listJobs()
 })
 
 app.whenReady().then(() => {

@@ -27,10 +27,19 @@ body {
   padding: 22px 26px;
 }
 
+.app__header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
 .app__header h1 {
   margin: 0;
   font-size: 26px;
   letter-spacing: 0.5px;
+}
+.app__queuebtn {
+  white-space: nowrap;
 }
 
 .app__tagline {
@@ -440,4 +449,50 @@ button.ghost:hover {
   height: 100%;
   background: var(--accent);
   transition: width 0.2s ease;
+}
+
+/* Batch queue */
+.queue__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.queue__job {
+  background: var(--panel);
+  border: 1px solid #30343d;
+  border-radius: 8px;
+  padding: 10px 12px;
+  margin-bottom: 8px;
+}
+.queue__job--running {
+  border-color: var(--accent);
+}
+.queue__head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.queue__rm {
+  margin-left: auto;
+  padding: 2px 8px;
+}
+.badge {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  padding: 2px 7px;
+  border-radius: 4px;
+  background: #333a47;
+  color: var(--text);
+}
+.badge--running {
+  background: #234a7a;
+}
+.badge--done {
+  background: #1f5b3c;
+  color: var(--ok);
+}
+.badge--error {
+  background: #5b2330;
+  color: var(--bad);
 }

@@ -45,9 +45,33 @@ export function ExportPanel({
   const [exporting, setExporting] = useState(false)
   const [progress, setProgress] = useState<ExportProgress | null>(null)
   const [result, setResult] = useState<ExportResult | null>(null)
+  const [queuedMsg, setQueuedMsg] = useState<string | null>(null)
 
   const naming = { showName, season, startEpisode, outputDir: outputDir ?? '' }
   const canExport = !exporting && showName.trim() !== '' && !!outputDir && segments.length > 0
+
+  function buildRequest(): ExportRequest | null {
+    if (!outputDir) return null
+    return {
+      source,
+      splitPoints,
+      options: {
+        mode,
+        preset,
+        deinterlace,
+        audioStreamIndices: audio,
+        burnSubtitleOrdinal: mode === 'copy' ? null : burnSub
+      },
+      naming: { showName: showName.trim(), season, startEpisode, outputDir }
+    }
+  }
+
+  async function addToQueue(): Promise<void> {
+    const req = buildRequest()
+    if (!req) return
+    await window.api.queueAdd(req)
+    setQueuedMsg(`Added “${showName.trim()}” (${segments.length} ep) to the queue`)
+  }
 
   function toggleAudio(index: number): void {
     setAudio((prev) =>
@@ -61,23 +85,12 @@ export function ExportPanel({
   }
 
   async function doExport(): Promise<void> {
-    if (!outputDir) return
+    const req = buildRequest()
+    if (!req) return
     setExporting(true)
     setResult(null)
     setProgress(null)
     const unsub = window.api.onExportProgress(setProgress)
-    const req: ExportRequest = {
-      source,
-      splitPoints,
-      options: {
-        mode,
-        preset,
-        deinterlace,
-        audioStreamIndices: audio,
-        burnSubtitleOrdinal: mode === 'copy' ? null : burnSub
-      },
-      naming: { showName: showName.trim(), season, startEpisode, outputDir }
-    }
     const res = await window.api.runExport(req)
     unsub()
     setExporting(false)
@@ -209,8 +222,12 @@ export function ExportPanel({
 
       <div className="export__row">
         <button onClick={doExport} disabled={!canExport}>
-          {exporting ? 'Exporting…' : `Export ${segments.length} episode${segments.length === 1 ? '' : 's'}`}
+          {exporting ? 'Exporting…' : `Export now (${segments.length})`}
         </button>
+        <button className="ghost" onClick={addToQueue} disabled={!canExport}>
+          ＋ Add to queue
+        </button>
+        {queuedMsg && <span className="ok small">{queuedMsg}</span>}
       </div>
 
       {progress && (

@@ -6,7 +6,8 @@ import type {
   FilmstripThumb,
   FrameResult,
   InspectResponse,
-  PreviewSource
+  PreviewSource,
+  QueueJobView
 } from '../shared/types'
 
 export interface AppInfo {
@@ -42,6 +43,22 @@ const api = {
     const listener = (_e: unknown, p: ExportProgress): void => cb(p)
     ipcRenderer.on('export:progress', listener)
     return () => ipcRenderer.removeListener('export:progress', listener)
+  },
+  /** Add a configured program to the batch queue. */
+  queueAdd: (req: ExportRequest): Promise<QueueJobView[]> => ipcRenderer.invoke('queue:add', req),
+  /** Remove a job from the queue (ignored if it is running). */
+  queueRemove: (id: string): Promise<QueueJobView[]> => ipcRenderer.invoke('queue:remove', id),
+  /** Remove all finished/errored jobs. */
+  queueClear: (): Promise<QueueJobView[]> => ipcRenderer.invoke('queue:clear'),
+  /** Get the current queue snapshot. */
+  queueList: (): Promise<QueueJobView[]> => ipcRenderer.invoke('queue:list'),
+  /** Start processing the queue (unattended); returns the current snapshot. */
+  queueRun: (): Promise<QueueJobView[]> => ipcRenderer.invoke('queue:run'),
+  /** Subscribe to queue updates. Returns an unsubscribe function. */
+  onQueueUpdate: (cb: (jobs: QueueJobView[]) => void): (() => void) => {
+    const listener = (_e: unknown, jobs: QueueJobView[]): void => cb(jobs)
+    ipcRenderer.on('queue:update', listener)
+    return () => ipcRenderer.removeListener('queue:update', listener)
   }
 }
 

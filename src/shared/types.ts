@@ -147,6 +147,25 @@ export interface ExportResult {
   error?: string
 }
 
+export type QueueStatus = 'queued' | 'running' | 'done' | 'error'
+
+/** Lightweight view of a queued export job sent to the renderer. */
+export interface QueueJobView {
+  id: string
+  label: string
+  showName: string
+  season: number
+  episodeCount: number
+  status: QueueStatus
+  /** 1-based episode currently exporting (when running). */
+  currentEpisode?: number
+  currentEpisodeName?: string
+  /** 0..1 progress of the current episode. */
+  fraction: number
+  outputs: string[]
+  error?: string
+}
+
 /** Result of a single frame extraction (JPEG as a data URL). */
 export type FrameResult =
   | { ok: true; dataUrl: string; timeSec: number }
