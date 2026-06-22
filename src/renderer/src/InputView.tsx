@@ -78,6 +78,7 @@ function VideoTsView({
                   label: `Title #${selected.id}`,
                   durationSec: selected.durationSec,
                   frameRate: selected.frameRate,
+                  chapterStarts: selected.chapters.map((c) => c.startSec).filter((t) => t > 0),
                   videoTsPath: input.videoTsPath,
                   title: selected.id
                 })

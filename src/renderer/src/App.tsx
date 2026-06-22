@@ -9,8 +9,14 @@ export default function App(): JSX.Element {
   const [info, setInfo] = useState<AppInfo | null>(null)
   const [input, setInput] = useState<InspectedInput | null>(null)
   const [source, setSource] = useState<PreviewSource | null>(null)
+  const [splitPoints, setSplitPoints] = useState<number[]>([])
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  function loadSource(src: PreviewSource): void {
+    setSplitPoints([])
+    setSource(src)
+  }
 
   useEffect(() => {
     window.api.getInfo().then(setInfo).catch(() => undefined)
@@ -43,7 +49,12 @@ export default function App(): JSX.Element {
 
       <main className="app__main">
         {source ? (
-          <Preview source={source} onBack={() => setSource(null)} />
+          <Preview
+            source={source}
+            onBack={() => setSource(null)}
+            splitPoints={splitPoints}
+            onSplitPointsChange={setSplitPoints}
+          />
         ) : (
           <>
             <section className="toolbar">
@@ -68,7 +79,7 @@ export default function App(): JSX.Element {
 
             {input && (
               <section className="card">
-                <InputView input={input} onLoad={setSource} />
+                <InputView input={input} onLoad={loadSource} />
               </section>
             )}
           </>

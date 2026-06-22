@@ -93,6 +93,8 @@ export type PreviewSource = {
   durationSec: number
   /** Frames per second, used for frame-stepping. */
   frameRate: number | null
+  /** Chapter start times (seconds) if known, for auto-proposing splits. */
+  chapterStarts?: number[]
 } & (
   | { kind: 'files'; files: string[]; fileDurations: number[] }
   | { kind: 'dvd'; videoTsPath: string; title: number }
@@ -107,4 +109,12 @@ export type FrameResult =
 export interface FilmstripThumb {
   timeSec: number
   dataUrl: string
+}
+
+/** A contiguous segment (one episode) derived from the split points. */
+export interface Segment {
+  /** 0-based order within the program. */
+  index: number
+  startSec: number
+  endSec: number
 }

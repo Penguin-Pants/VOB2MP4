@@ -272,3 +272,93 @@ button.ghost:hover {
   color: var(--text);
   padding: 6px 8px;
 }
+
+/* Timeline markers track */
+.ttrack {
+  position: relative;
+  height: 26px;
+  background: #14161b;
+  border: 1px solid #30343d;
+  border-radius: 6px;
+  cursor: pointer;
+  touch-action: none;
+}
+.ttrack__chapter {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: #4a5260;
+  pointer-events: none;
+}
+.ttrack__playhead {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: var(--accent);
+  pointer-events: none;
+}
+.ttrack__split {
+  position: absolute;
+  top: -3px;
+  bottom: -3px;
+  width: 10px;
+  margin-left: -5px;
+  background: var(--ok);
+  border: 1px solid #0c2a18;
+  border-radius: 3px;
+  cursor: ew-resize;
+}
+.ttrack__split.dragging,
+.ttrack__split:hover {
+  background: #7be6ab;
+}
+
+/* Split + segment panels */
+.splits {
+  margin-top: 6px;
+}
+.splits__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+.splits__cols {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 18px;
+}
+.splitlist,
+.seglist {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  font-size: 13px;
+}
+.splitlist li,
+.seglist li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 0;
+  border-bottom: 1px solid #2c2f38;
+}
+.splitlist__btns {
+  margin-left: auto;
+  display: flex;
+  gap: 4px;
+}
+.splitlist__btns button,
+.seglist button {
+  padding: 2px 7px;
+  font-size: 12px;
+}
+.seglist__n {
+  color: var(--accent);
+  width: 46px;
+}
+.seglist code {
+  flex: 1;
+}
