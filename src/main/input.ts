@@ -66,8 +66,10 @@ export function stripExt(name: string): string {
  * (one disc per file), unlike VOB parts which are joined.
  */
 export function groupMediaFiles(paths: string[]): VobGroup[] {
+  // Use the full path in the id so two same-named files from different folders
+  // don't collide (which would break list keys / program selection).
   return [...paths].sort(naturalCompare).map((p) => ({
-    id: `media:${basename(p)}`,
+    id: `media:${p}`,
     label: stripExt(p),
     files: [p]
   }))

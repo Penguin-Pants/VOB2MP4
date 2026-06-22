@@ -13,7 +13,7 @@
     "typecheck:node": "tsc --noEmit -p tsconfig.node.json --composite false",
     "typecheck:web": "tsc --noEmit -p tsconfig.web.json --composite false",
     "typecheck": "npm run typecheck:node && npm run typecheck:web",
-    "test": "node --import tsx --test src/main/input.test.ts src/main/ffprobe.test.ts src/main/preview.test.ts src/main/segments.test.ts src/main/naming.test.ts src/main/exportArgs.test.ts src/main/settings.test.ts src/main/scan.test.ts",
+    "test": "node --import tsx --test src/main/input.test.ts src/main/ffprobe.test.ts src/main/preview.test.ts src/main/segments.test.ts src/main/naming.test.ts src/main/exportArgs.test.ts src/main/settings.test.ts src/main/scan.test.ts src/main/export.test.ts",
     "fetch-ffmpeg": "node scripts/download-ffmpeg.mjs",
     "build:win": "electron-vite build && electron-builder --win --config electron-builder.yml"
   },

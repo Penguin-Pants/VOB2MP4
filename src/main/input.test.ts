@@ -85,5 +85,11 @@ test('groupMediaFiles makes one program per file, natural-sorted', () => {
     ['Disc 1', 'Disc 2', 'Disc 10']
   )
   assert.deepEqual(groups[0].files, ['/d/Disc 1.m4v'])
-  assert.equal(groups[0].id, 'media:Disc 1.m4v')
+  assert.equal(groups[0].id, 'media:/d/Disc 1.m4v')
+})
+
+test('groupMediaFiles gives same-named files in different folders distinct ids', () => {
+  const groups = groupMediaFiles(['/a/Disc 1.m4v', '/b/Disc 1.m4v'])
+  assert.equal(groups.length, 2)
+  assert.notEqual(groups[0].id, groups[1].id)
 })

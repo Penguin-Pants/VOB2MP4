@@ -163,11 +163,14 @@ export interface ProjectFile {
   naming: NamingOptions
 }
 
-/** Export defaults remembered between sessions to pre-fill the next job. */
+/**
+ * Export defaults remembered between sessions to pre-fill the next job.
+ * Note: deinterlacing is intentionally NOT remembered — it is derived from the
+ * loaded source's codec/interlacing instead.
+ */
 export interface LastExportSettings {
   mode: ConvertMode
   preset: QualityPreset
-  deinterlace: boolean
   outputDir: string
   showName: string
   season: number
