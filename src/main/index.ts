@@ -7,6 +7,7 @@ import { runExport } from './export'
 import { addJob, clearFinished, listJobs, removeJob, runQueue } from './queue'
 import { getSettings, updateSettings } from './settings'
 import { openProject, saveProject } from './project'
+import { cancelScan, scanBlackFrames } from './scan'
 import type {
   AppSettings,
   ExportRequest,
@@ -139,6 +140,17 @@ ipcMain.handle('settings:update', (_e, patch: SettingsPatch): AppSettings =>
 // IPC: project save/open.
 ipcMain.handle('project:save', (_e, project: ProjectFile) => saveProject(project))
 ipcMain.handle('project:open', () => openProject())
+
+// IPC: scan for black frames (scene breaks); progress via 'scan:progress'.
+ipcMain.handle('scan:black', (e, source: PreviewSource, minBlackSec: number): Promise<number[]> =>
+  scanBlackFrames(source, minBlackSec, (fraction) => e.sender.send('scan:progress', fraction))
+)
+ipcMain.handle('scan:cancel', (): void => cancelScan())
+
+// IPC: reveal a file/folder in the OS file manager.
+ipcMain.handle('shell:showItem', (_e, path: string): void => {
+  if (path) shell.showItemInFolder(path)
+})
 
 app.whenReady().then(() => {
   createWindow()

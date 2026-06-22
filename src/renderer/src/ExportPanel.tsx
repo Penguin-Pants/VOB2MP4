@@ -300,11 +300,18 @@ export function ExportPanel({
       )}
 
       {result && (
-        <p className={result.ok ? 'ok small' : 'status--bad small'}>
-          {result.ok
-            ? `✓ Exported ${result.outputs.length} episode(s) to ${outputDir}`
-            : `Export failed: ${result.error}`}
-        </p>
+        <div className="export__row">
+          <span className={result.ok ? 'ok small' : 'status--bad small'}>
+            {result.ok
+              ? `✓ Exported ${result.outputs.length} episode(s) to ${outputDir}`
+              : `Export failed: ${result.error}`}
+          </span>
+          {result.ok && result.outputs.length > 0 && (
+            <button className="ghost" onClick={() => void window.api.showItemInFolder(result.outputs[0])}>
+              Open folder
+            </button>
+          )}
+        </div>
       )}
     </div>
   )

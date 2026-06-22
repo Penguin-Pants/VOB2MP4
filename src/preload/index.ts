@@ -73,7 +73,20 @@ const api = {
     ipcRenderer.invoke('project:save', project),
   /** Open a project file (shows an open dialog). */
   openProject: (): Promise<{ ok: boolean; project?: ProjectFile; error?: string }> =>
-    ipcRenderer.invoke('project:open')
+    ipcRenderer.invoke('project:open'),
+  /** Scan for black frames; resolves with candidate split-point times. */
+  scanBlackFrames: (source: PreviewSource, minBlackSec: number): Promise<number[]> =>
+    ipcRenderer.invoke('scan:black', source, minBlackSec),
+  /** Cancel an in-progress black-frame scan. */
+  cancelScan: (): Promise<void> => ipcRenderer.invoke('scan:cancel'),
+  /** Subscribe to scan progress (0..1). Returns an unsubscribe function. */
+  onScanProgress: (cb: (fraction: number) => void): (() => void) => {
+    const listener = (_e: unknown, f: number): void => cb(f)
+    ipcRenderer.on('scan:progress', listener)
+    return () => ipcRenderer.removeListener('scan:progress', listener)
+  },
+  /** Reveal a written file/folder in the OS file manager. */
+  showItemInFolder: (path: string): Promise<void> => ipcRenderer.invoke('shell:showItem', path)
 }
 
 contextBridge.exposeInMainWorld('api', api)

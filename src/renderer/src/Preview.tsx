@@ -29,6 +29,9 @@ export function Preview({
   const [error, setError] = useState<string | null>(null)
   const [filmstrip, setFilmstrip] = useState<FilmstripThumb[]>([])
   const [jumpText, setJumpText] = useState('')
+  const [scanning, setScanning] = useState(false)
+  const [scanFrac, setScanFrac] = useState(0)
+  const [scanMsg, setScanMsg] = useState<string | null>(null)
 
   const reqToken = useRef(0)
   const scrubTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -105,6 +108,35 @@ export function Preview({
       )
     )
   }
+
+  async function scanScenes(): Promise<void> {
+    setScanning(true)
+    setScanFrac(0)
+    setScanMsg(null)
+    const unsub = window.api.onScanProgress(setScanFrac)
+    const candidates = await window.api.scanBlackFrames(source, 0.4)
+    unsub()
+    setScanning(false)
+    if (candidates.length > 0) {
+      onSplitPointsChange(normalizeSplitPoints([...splitPoints, ...candidates], dur))
+      setScanMsg(`Found ${candidates.length} scene break(s)`)
+    } else {
+      setScanMsg('No black-frame scene breaks found')
+    }
+  }
+
+  // Press "S" to add a split at the playhead (unless typing in a field).
+  useEffect(() => {
+    function onKey(e: KeyboardEvent): void {
+      const tag = (document.activeElement?.tagName ?? '').toLowerCase()
+      if (tag === 'input' || tag === 'select' || tag === 'textarea') return
+      if (e.key.toLowerCase() === 's') {
+        onSplitPointsChange(normalizeSplitPoints([...splitPoints, timeSec], dur))
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [splitPoints, timeSec, dur, onSplitPointsChange])
 
   return (
     <div className="preview">
@@ -213,17 +245,30 @@ export function Preview({
 
       <div className="splits">
         <div className="splits__actions">
-          <button onClick={addSplit}>✂ Split at playhead</button>
+          <button onClick={addSplit}>✂ Split at playhead (S)</button>
           {(chapterStarts?.length ?? 0) > 0 && (
             <button className="ghost" onClick={proposeFromChapters}>
               Propose from chapters ({chapterStarts!.length})
             </button>
+          )}
+          {!scanning ? (
+            <button className="ghost" onClick={scanScenes} title="Detect black frames as episode boundaries">
+              🔍 Scan scene breaks
+            </button>
+          ) : (
+            <>
+              <span className="muted small">Scanning… {Math.round(scanFrac * 100)}%</span>
+              <button className="ghost" onClick={() => void window.api.cancelScan()}>
+                Cancel
+              </button>
+            </>
           )}
           {splitPoints.length > 0 && (
             <button className="ghost" onClick={clearSplits}>
               Clear splits
             </button>
           )}
+          {scanMsg && <span className="muted small">{scanMsg}</span>}
         </div>
 
         <div className="splits__cols">

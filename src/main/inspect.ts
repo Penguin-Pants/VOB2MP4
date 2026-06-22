@@ -42,9 +42,14 @@ async function inspectGroup(group: VobGroup): Promise<VobGroupInspected> {
     } catch {
       /* size is best-effort */
     }
-    const probe = await probeFile(file)
-    if (!firstProbe) firstProbe = probe
-    fileDurations.push(probe.durationSec ?? 0)
+    try {
+      const probe = await probeFile(file)
+      if (!firstProbe) firstProbe = probe
+      fileDurations.push(probe.durationSec ?? 0)
+    } catch {
+      // A single unreadable VOB shouldn't break inspection of the whole group.
+      fileDurations.push(0)
+    }
   }
 
   const durationSec = fileDurations.reduce((a, b) => a + b, 0)

@@ -1,8 +1,10 @@
 # VOB2MP4 — Project Vision
 
-> Status: **Vision agreed.** Technical stack decisions in progress (see "Technical Decisions" near the end).
-> This document is the single source of truth for what we are building. It is written so a fresh
-> session can read it and understand the project 100% without re-asking the owner.
+> Status: **Implemented.** All seven build stages are complete and pushed (PR #1); each builds
+> green on the Windows CI runner. Remaining: validation on real Windows hardware + DVD rips
+> (GUI, DVD-title path, subtitle burn-in). This document is the single source of truth for what
+> we are building. It is written so a fresh session can read it and understand the project 100%
+> without re-asking the owner.
 
 ---
 

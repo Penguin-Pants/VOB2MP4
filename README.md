@@ -7,8 +7,10 @@ private.
 
 See [`VISION.md`](./VISION.md) for the full project vision and the finalized technical decisions.
 
-> **Status:** Stage 0 — app skeleton + Windows build pipeline. Features arrive in later stages
-> (open disc → preview → mark splits → export → batch queue).
+> **Status:** Feature-complete (Stages 0–7). Workflow: open a VIDEO_TS folder or loose VOBs →
+> preview & scrub → mark split points (manual, chapters, or black-frame scan) → choose tracks /
+> quality / naming → export, or queue many discs and run unattended. Save/reopen projects;
+> last-used settings are remembered. Needs validation on real Windows hardware + discs.
 
 ## Tech stack
 

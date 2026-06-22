@@ -14,7 +14,7 @@ function concatLine(file: string): string {
 }
 
 /** Resolve the ffmpeg input args + target for a source, writing a temp list if needed. */
-async function resolveInput(
+export async function resolveInput(
   source: PreviewSource
 ): Promise<{ inputArgs: string[]; input: string; cleanup: () => Promise<void> }> {
   if (source.kind === 'dvd') {
