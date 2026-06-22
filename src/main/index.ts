@@ -2,7 +2,8 @@ import { app, shell, BrowserWindow, ipcMain, dialog } from 'electron'
 import { join } from 'path'
 import { ffmpegVersion, binariesPresent } from './ffmpeg'
 import { inspectPaths } from './inspect'
-import type { InspectResponse } from '../shared/types'
+import { extractFrame, generateFilmstrip } from './preview'
+import type { FilmstripThumb, FrameResult, InspectResponse, PreviewSource } from '../shared/types'
 
 function createWindow(): void {
   const mainWindow = new BrowserWindow({
@@ -75,6 +76,20 @@ ipcMain.handle('input:inspect', async (_e, paths: string[]): Promise<InspectResp
     return { ok: false, error: err instanceof Error ? err.message : String(err) }
   }
 })
+
+// IPC: extract a single preview frame at a timeline position.
+ipcMain.handle(
+  'preview:frame',
+  (_e, source: PreviewSource, timeSec: number, accurate: boolean): Promise<FrameResult> =>
+    extractFrame(source, timeSec, accurate)
+)
+
+// IPC: generate the timeline filmstrip thumbnails.
+ipcMain.handle(
+  'preview:filmstrip',
+  (_e, source: PreviewSource, count: number): Promise<FilmstripThumb[]> =>
+    generateFilmstrip(source, count)
+)
 
 app.whenReady().then(() => {
   createWindow()

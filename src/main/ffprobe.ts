@@ -16,6 +16,8 @@ export interface RawFfprobe {
     channel_layout?: string
     width?: number
     height?: number
+    r_frame_rate?: string
+    avg_frame_rate?: string
     tags?: Record<string, string>
   }>
   chapters?: Array<{
@@ -23,6 +25,17 @@ export interface RawFfprobe {
     start_time?: string
     end_time?: string
   }>
+}
+
+/** Parse an ffprobe rational like "30000/1001" into fps, or null. */
+export function parseFrameRate(value: string | undefined): number | null {
+  if (!value || value === '0/0' || value === 'N/A') return null
+  const [num, den] = value.split('/')
+  const n = Number.parseFloat(num)
+  const d = den != null ? Number.parseFloat(den) : 1
+  if (!Number.isFinite(n) || !Number.isFinite(d) || d === 0) return null
+  const fps = n / d
+  return fps > 0 ? fps : null
 }
 
 function streamType(codecType: string | undefined): MediaStreamInfo['type'] {
@@ -58,8 +71,14 @@ export function parseProbe(raw: RawFfprobe): ProbeResult {
     }
   })
 
+  const video = (raw.streams ?? []).find((s) => s.codec_type === 'video')
+  const frameRate = video
+    ? parseFrameRate(video.r_frame_rate) ?? parseFrameRate(video.avg_frame_rate)
+    : null
+
   return {
     durationSec: durationSec != null && Number.isFinite(durationSec) ? durationSec : null,
+    frameRate,
     streams
   }
 }

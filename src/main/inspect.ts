@@ -30,11 +30,11 @@ async function findVideoTsDir(dir: string): Promise<string | null> {
   return null
 }
 
-/** Probe a loose-VOB group: streams from the first file, duration summed. */
+/** Probe a loose-VOB group: streams from the first file, durations per file. */
 async function inspectGroup(group: VobGroup): Promise<VobGroupInspected> {
-  let durationSec = 0
   let firstProbe: ProbeResult | null = null
   let totalBytes = 0
+  const fileDurations: number[] = []
 
   for (const file of group.files) {
     try {
@@ -44,14 +44,18 @@ async function inspectGroup(group: VobGroup): Promise<VobGroupInspected> {
     }
     const probe = await probeFile(file)
     if (!firstProbe) firstProbe = probe
-    durationSec += probe.durationSec ?? 0
+    fileDurations.push(probe.durationSec ?? 0)
   }
+
+  const durationSec = fileDurations.reduce((a, b) => a + b, 0)
 
   return {
     ...group,
     totalBytes,
+    fileDurations,
     probe: {
       durationSec: durationSec || (firstProbe?.durationSec ?? null),
+      frameRate: firstProbe?.frameRate ?? null,
       streams: firstProbe?.streams ?? []
     }
   }

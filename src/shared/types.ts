@@ -20,6 +20,8 @@ export interface MediaStreamInfo {
 export interface ProbeResult {
   /** Total duration in seconds, or null if unknown. */
   durationSec: number | null
+  /** Frames per second of the primary video stream, or null if unknown. */
+  frameRate: number | null
   streams: MediaStreamInfo[]
 }
 
@@ -38,6 +40,8 @@ export interface VobGroup {
 /** A loose-VOB group plus the probed media info for the joined program. */
 export interface VobGroupInspected extends VobGroup {
   probe: ProbeResult
+  /** Per-file durations (seconds), aligned with `files`, for timeline mapping. */
+  fileDurations: number[]
   /** Sum of file sizes in bytes (for display), if known. */
   totalBytes?: number
 }
@@ -52,6 +56,7 @@ export interface DvdTitle {
   /** 1-based title number on the disc. */
   id: number
   durationSec: number
+  frameRate: number | null
   chapterCount: number
   chapters: DvdChapter[]
   streams: MediaStreamInfo[]
@@ -75,3 +80,31 @@ export type InspectedInput = VideoTsInput | VobFilesInput
 export type InspectResponse =
   | { ok: true; input: InspectedInput }
   | { ok: false; error: string }
+
+/**
+ * A single "program" loaded into the preview/timeline. Either a set of loose
+ * VOB files joined virtually, or a single DVD title read via the dvdvideo
+ * demuxer. Carries everything the main process needs to extract frames.
+ */
+export type PreviewSource = {
+  /** Human label for the loaded program. */
+  label: string
+  /** Total program duration in seconds. */
+  durationSec: number
+  /** Frames per second, used for frame-stepping. */
+  frameRate: number | null
+} & (
+  | { kind: 'files'; files: string[]; fileDurations: number[] }
+  | { kind: 'dvd'; videoTsPath: string; title: number }
+)
+
+/** Result of a single frame extraction (JPEG as a data URL). */
+export type FrameResult =
+  | { ok: true; dataUrl: string; timeSec: number }
+  | { ok: false; error: string }
+
+/** One thumbnail in the timeline filmstrip. */
+export interface FilmstripThumb {
+  timeSec: number
+  dataUrl: string
+}

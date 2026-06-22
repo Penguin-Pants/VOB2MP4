@@ -56,6 +56,7 @@ export async function probeDvdTitle(discRoot: string, title: number): Promise<Dv
     return {
       id: title,
       durationSec: probe.durationSec ?? 0,
+      frameRate: probe.frameRate,
       chapterCount: chapters.length,
       chapters,
       streams: probe.streams

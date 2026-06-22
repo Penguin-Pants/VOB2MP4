@@ -1,14 +1,26 @@
 import { useState } from 'react'
-import type { InspectedInput } from '../../shared/types'
+import type { InspectedInput, PreviewSource } from '../../shared/types'
 import { Tracks } from './Tracks'
 import { formatBytes, formatDuration } from './format'
 
-export function InputView({ input }: { input: InspectedInput }): JSX.Element {
-  if (input.kind === 'video_ts') return <VideoTsView input={input} />
-  return <VobFilesView input={input} />
+export function InputView({
+  input,
+  onLoad
+}: {
+  input: InspectedInput
+  onLoad: (source: PreviewSource) => void
+}): JSX.Element {
+  if (input.kind === 'video_ts') return <VideoTsView input={input} onLoad={onLoad} />
+  return <VobFilesView input={input} onLoad={onLoad} />
 }
 
-function VideoTsView({ input }: { input: Extract<InspectedInput, { kind: 'video_ts' }> }): JSX.Element {
+function VideoTsView({
+  input,
+  onLoad
+}: {
+  input: Extract<InspectedInput, { kind: 'video_ts' }>
+  onLoad: (source: PreviewSource) => void
+}): JSX.Element {
   // Default-select the longest title, but always show the full list to choose.
   const longest = input.titles.reduce(
     (best, t) => (t.durationSec > (best?.durationSec ?? -1) ? t : best),
@@ -57,7 +69,23 @@ function VideoTsView({ input }: { input: Extract<InspectedInput, { kind: 'video_
 
       {selected && (
         <div className="card card--nested">
-          <h4>Title #{selected.id} tracks</h4>
+          <div className="group__head">
+            <h4>Title #{selected.id} tracks</h4>
+            <button
+              onClick={() =>
+                onLoad({
+                  kind: 'dvd',
+                  label: `Title #${selected.id}`,
+                  durationSec: selected.durationSec,
+                  frameRate: selected.frameRate,
+                  videoTsPath: input.videoTsPath,
+                  title: selected.id
+                })
+              }
+            >
+              Load in preview →
+            </button>
+          </div>
           <Tracks streams={selected.streams} />
         </div>
       )}
@@ -65,7 +93,13 @@ function VideoTsView({ input }: { input: Extract<InspectedInput, { kind: 'video_
   )
 }
 
-function VobFilesView({ input }: { input: Extract<InspectedInput, { kind: 'vob_files' }> }): JSX.Element {
+function VobFilesView({
+  input,
+  onLoad
+}: {
+  input: Extract<InspectedInput, { kind: 'vob_files' }>
+  onLoad: (source: PreviewSource) => void
+}): JSX.Element {
   return (
     <div>
       <p className="muted small">Loose VOB files · grouped into programs (no chapter data)</p>
@@ -85,6 +119,22 @@ function VobFilesView({ input }: { input: Extract<InspectedInput, { kind: 'vob_f
             ))}
           </ol>
           <Tracks streams={g.probe.streams} />
+          <div className="group__actions">
+            <button
+              onClick={() =>
+                onLoad({
+                  kind: 'files',
+                  label: g.label,
+                  durationSec: g.probe.durationSec ?? 0,
+                  frameRate: g.probe.frameRate,
+                  files: g.files,
+                  fileDurations: g.fileDurations
+                })
+              }
+            >
+              Load in preview →
+            </button>
+          </div>
         </div>
       ))}
     </div>

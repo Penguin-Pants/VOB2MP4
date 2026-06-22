@@ -1,12 +1,14 @@
 import { useEffect, useState } from 'react'
-import type { InspectedInput } from '../../shared/types'
+import type { InspectedInput, PreviewSource } from '../../shared/types'
 import { InputView } from './InputView'
+import { Preview } from './Preview'
 
 type AppInfo = Awaited<ReturnType<Window['api']['getInfo']>>
 
 export default function App(): JSX.Element {
   const [info, setInfo] = useState<AppInfo | null>(null)
   const [input, setInput] = useState<InspectedInput | null>(null)
+  const [source, setSource] = useState<PreviewSource | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -40,30 +42,36 @@ export default function App(): JSX.Element {
       </header>
 
       <main className="app__main">
-        <section className="toolbar">
-          <button onClick={() => open('folder')} disabled={busy}>
-            Open VIDEO_TS / folder…
-          </button>
-          <button onClick={() => open('files')} disabled={busy}>
-            Open VOB file(s)…
-          </button>
-          {busy && <span className="muted">Inspecting…</span>}
-        </section>
+        {source ? (
+          <Preview source={source} onBack={() => setSource(null)} />
+        ) : (
+          <>
+            <section className="toolbar">
+              <button onClick={() => open('folder')} disabled={busy}>
+                Open VIDEO_TS / folder…
+              </button>
+              <button onClick={() => open('files')} disabled={busy}>
+                Open VOB file(s)…
+              </button>
+              {busy && <span className="muted">Inspecting…</span>}
+            </section>
 
-        {error && <p className="status status--bad">Error: {error}</p>}
+            {error && <p className="status status--bad">Error: {error}</p>}
 
-        {!input && !busy && !error && (
-          <p className="muted">
-            Open a <strong>VIDEO_TS folder</strong> (lists titles + chapters) or select
-            <strong> loose .VOB files</strong> (grouped into programs) to see what&apos;s inside.
-            Read-only — nothing is changed yet (Stage 1).
-          </p>
-        )}
+            {!input && !busy && !error && (
+              <p className="muted">
+                Open a <strong>VIDEO_TS folder</strong> (lists titles + chapters) or select
+                <strong> loose .VOB files</strong> (grouped into programs) to see what&apos;s
+                inside, then load a program to preview and scrub it.
+              </p>
+            )}
 
-        {input && (
-          <section className="card">
-            <InputView input={input} />
-          </section>
+            {input && (
+              <section className="card">
+                <InputView input={input} onLoad={setSource} />
+              </section>
+            )}
+          </>
         )}
       </main>
 

@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron'
-import type { InspectResponse } from '../shared/types'
+import type { FilmstripThumb, FrameResult, InspectResponse, PreviewSource } from '../shared/types'
 
 export interface AppInfo {
   appVersion: string
@@ -18,7 +18,13 @@ const api = {
   openVobFiles: (): Promise<string[]> => ipcRenderer.invoke('dialog:openVobFiles'),
   /** Inspect a selection read-only and classify it (VIDEO_TS vs loose VOBs). */
   inspect: (paths: string[]): Promise<InspectResponse> =>
-    ipcRenderer.invoke('input:inspect', paths)
+    ipcRenderer.invoke('input:inspect', paths),
+  /** Extract one preview frame at a timeline position (seconds). */
+  getFrame: (source: PreviewSource, timeSec: number, accurate: boolean): Promise<FrameResult> =>
+    ipcRenderer.invoke('preview:frame', source, timeSec, accurate),
+  /** Generate `count` evenly-spaced filmstrip thumbnails for the program. */
+  getFilmstrip: (source: PreviewSource, count: number): Promise<FilmstripThumb[]> =>
+    ipcRenderer.invoke('preview:filmstrip', source, count)
 }
 
 contextBridge.exposeInMainWorld('api', api)
