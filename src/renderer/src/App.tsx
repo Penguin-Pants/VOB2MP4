@@ -1,8 +1,28 @@
 import { useEffect, useState } from 'react'
-import type { InspectedInput, PreviewSource, QueueJobView } from '../../shared/types'
+import type {
+  AppSettings,
+  InspectedInput,
+  LastExportSettings,
+  PreviewSource,
+  QueueJobView
+} from '../../shared/types'
 import { InputView } from './InputView'
 import { Preview } from './Preview'
 import { QueueView } from './QueueView'
+import type { ExportInitial } from './ExportPanel'
+
+function initialFromSettings(le: LastExportSettings | undefined): ExportInitial | undefined {
+  if (!le) return undefined
+  return {
+    mode: le.mode,
+    preset: le.preset,
+    deinterlace: le.deinterlace,
+    showName: le.showName,
+    season: le.season,
+    startEpisode: le.startEpisode,
+    outputDir: le.outputDir || null
+  }
+}
 
 type AppInfo = Awaited<ReturnType<Window['api']['getInfo']>>
 
@@ -15,10 +35,42 @@ export default function App(): JSX.Element {
   const [error, setError] = useState<string | null>(null)
   const [queue, setQueue] = useState<QueueJobView[]>([])
   const [showQueue, setShowQueue] = useState(false)
+  const [exportInitial, setExportInitial] = useState<ExportInitial | undefined>(undefined)
+  const [loadNonce, setLoadNonce] = useState(0)
 
-  function loadSource(src: PreviewSource): void {
+  async function loadSource(src: PreviewSource): Promise<void> {
+    // Pre-fill export options from the most recently used settings.
+    const settings = await window.api.getSettings().catch((): AppSettings => ({}))
+    setExportInitial(initialFromSettings(settings.lastExport))
     setSplitPoints([])
+    setLoadNonce((n) => n + 1)
     setSource(src)
+  }
+
+  async function openProject(): Promise<void> {
+    const res = await window.api.openProject()
+    if (res.ok && res.project) {
+      const p = res.project
+      setInput(null)
+      setShowQueue(false)
+      setError(null)
+      setSplitPoints(p.splitPoints)
+      setExportInitial({
+        mode: p.options.mode,
+        preset: p.options.preset,
+        deinterlace: p.options.deinterlace,
+        audio: p.options.audioStreamIndices,
+        burnSub: p.options.burnSubtitleOrdinal,
+        showName: p.naming.showName,
+        season: p.naming.season,
+        startEpisode: p.naming.startEpisode,
+        outputDir: p.naming.outputDir || null
+      })
+      setLoadNonce((n) => n + 1)
+      setSource(p.source)
+    } else if (res.error) {
+      setError(res.error)
+    }
   }
 
   useEffect(() => {
@@ -69,6 +121,8 @@ export default function App(): JSX.Element {
             onBack={() => setSource(null)}
             splitPoints={splitPoints}
             onSplitPointsChange={setSplitPoints}
+            exportInitial={exportInitial}
+            exportKey={`${source.kind}:${source.label}:${source.durationSec}:${loadNonce}`}
           />
         ) : (
           <>
@@ -78,6 +132,9 @@ export default function App(): JSX.Element {
               </button>
               <button onClick={() => open('files')} disabled={busy}>
                 Open VOB file(s)…
+              </button>
+              <button className="ghost" onClick={openProject} disabled={busy}>
+                Open project…
               </button>
               {busy && <span className="muted">Inspecting…</span>}
             </section>

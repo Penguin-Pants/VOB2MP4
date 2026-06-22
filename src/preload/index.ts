@@ -1,5 +1,6 @@
 import { contextBridge, ipcRenderer } from 'electron'
 import type {
+  AppSettings,
   ExportProgress,
   ExportRequest,
   ExportResult,
@@ -7,7 +8,9 @@ import type {
   FrameResult,
   InspectResponse,
   PreviewSource,
-  QueueJobView
+  ProjectFile,
+  QueueJobView,
+  SettingsPatch
 } from '../shared/types'
 
 export interface AppInfo {
@@ -59,7 +62,18 @@ const api = {
     const listener = (_e: unknown, jobs: QueueJobView[]): void => cb(jobs)
     ipcRenderer.on('queue:update', listener)
     return () => ipcRenderer.removeListener('queue:update', listener)
-  }
+  },
+  /** Read remembered settings. */
+  getSettings: (): Promise<AppSettings> => ipcRenderer.invoke('settings:get'),
+  /** Persist a settings patch. */
+  updateSettings: (patch: SettingsPatch): Promise<AppSettings> =>
+    ipcRenderer.invoke('settings:update', patch),
+  /** Save the current setup as a project file (shows a save dialog). */
+  saveProject: (project: ProjectFile): Promise<{ ok: boolean; path?: string; error?: string }> =>
+    ipcRenderer.invoke('project:save', project),
+  /** Open a project file (shows an open dialog). */
+  openProject: (): Promise<{ ok: boolean; project?: ProjectFile; error?: string }> =>
+    ipcRenderer.invoke('project:open')
 }
 
 contextBridge.exposeInMainWorld('api', api)

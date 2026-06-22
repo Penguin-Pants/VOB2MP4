@@ -3,7 +3,7 @@ import type { FilmstripThumb, PreviewSource } from '../../shared/types'
 import { clampSplitMove, normalizeSplitPoints, segmentsFromSplits } from '../../shared/segments'
 import { formatDuration, parseTimecode } from './format'
 import { TimelineTrack } from './TimelineTrack'
-import { ExportPanel } from './ExportPanel'
+import { ExportPanel, type ExportInitial } from './ExportPanel'
 
 const FILMSTRIP_COUNT = 16
 const SCRUB_DEBOUNCE_MS = 90
@@ -12,12 +12,16 @@ export function Preview({
   source,
   onBack,
   splitPoints,
-  onSplitPointsChange
+  onSplitPointsChange,
+  exportInitial,
+  exportKey
 }: {
   source: PreviewSource
   onBack: () => void
   splitPoints: number[]
   onSplitPointsChange: (points: number[]) => void
+  exportInitial?: ExportInitial
+  exportKey: string
 }): JSX.Element {
   const [timeSec, setTimeSec] = useState(0)
   const [frameUrl, setFrameUrl] = useState<string | null>(null)
@@ -272,11 +276,7 @@ export function Preview({
         </div>
       </div>
 
-      <ExportPanel
-        key={`${source.kind}:${source.label}:${source.durationSec}`}
-        source={source}
-        splitPoints={splitPoints}
-      />
+      <ExportPanel key={exportKey} source={source} splitPoints={splitPoints} initial={exportInitial} />
     </div>
   )
 }

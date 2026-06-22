@@ -6,10 +6,24 @@ import type {
   ExportResult,
   MediaStreamInfo,
   PreviewSource,
+  ProjectFile,
   QualityPreset
 } from '../../shared/types'
 import { segmentsFromSplits } from '../../shared/segments'
 import { episodeFileName, seasonFolderName } from '../../shared/naming'
+
+/** Initial export config (from remembered settings or a loaded project). */
+export interface ExportInitial {
+  mode?: ConvertMode
+  preset?: QualityPreset
+  deinterlace?: boolean
+  audio?: number[]
+  burnSub?: number | null
+  showName?: string
+  season?: number
+  startEpisode?: number
+  outputDir?: string | null
+}
 
 function audioLabel(s: MediaStreamInfo): string {
   const ch = s.channelLayout ?? (s.channels ? `${s.channels}ch` : '')
@@ -21,26 +35,28 @@ function subLabel(s: MediaStreamInfo): string {
 
 export function ExportPanel({
   source,
-  splitPoints
+  splitPoints,
+  initial
 }: {
   source: PreviewSource
   splitPoints: number[]
+  initial?: ExportInitial
 }): JSX.Element {
   const audioStreams = source.streams.filter((s) => s.type === 'audio')
   const subtitleStreams = source.streams.filter((s) => s.type === 'subtitle')
   const segments = segmentsFromSplits(splitPoints, source.durationSec)
 
-  const [showName, setShowName] = useState('')
-  const [season, setSeason] = useState(1)
-  const [startEpisode, setStartEpisode] = useState(1)
-  const [outputDir, setOutputDir] = useState<string | null>(null)
-  const [mode, setMode] = useState<ConvertMode>('reencode')
-  const [preset, setPreset] = useState<QualityPreset>('balanced')
-  const [deinterlace, setDeinterlace] = useState(true)
+  const [showName, setShowName] = useState(initial?.showName ?? '')
+  const [season, setSeason] = useState(initial?.season ?? 1)
+  const [startEpisode, setStartEpisode] = useState(initial?.startEpisode ?? 1)
+  const [outputDir, setOutputDir] = useState<string | null>(initial?.outputDir ?? null)
+  const [mode, setMode] = useState<ConvertMode>(initial?.mode ?? 'reencode')
+  const [preset, setPreset] = useState<QualityPreset>(initial?.preset ?? 'balanced')
+  const [deinterlace, setDeinterlace] = useState(initial?.deinterlace ?? true)
   const [audio, setAudio] = useState<number[]>(
-    audioStreams.length > 0 ? [audioStreams[0].index] : []
+    initial?.audio ?? (audioStreams.length > 0 ? [audioStreams[0].index] : [])
   )
-  const [burnSub, setBurnSub] = useState<number | null>(null)
+  const [burnSub, setBurnSub] = useState<number | null>(initial?.burnSub ?? null)
 
   const [exporting, setExporting] = useState(false)
   const [progress, setProgress] = useState<ExportProgress | null>(null)
@@ -66,11 +82,48 @@ export function ExportPanel({
     }
   }
 
+  function persistSettings(): void {
+    void window.api.updateSettings({
+      lastExport: {
+        mode,
+        preset,
+        deinterlace,
+        outputDir: outputDir ?? '',
+        showName: showName.trim(),
+        season,
+        startEpisode
+      }
+    })
+  }
+
+  function currentProject(): ProjectFile {
+    return {
+      version: 1,
+      source,
+      splitPoints,
+      options: {
+        mode,
+        preset,
+        deinterlace,
+        audioStreamIndices: audio,
+        burnSubtitleOrdinal: mode === 'copy' ? null : burnSub
+      },
+      naming: { showName: showName.trim(), season, startEpisode, outputDir: outputDir ?? '' }
+    }
+  }
+
   async function addToQueue(): Promise<void> {
     const req = buildRequest()
     if (!req) return
+    persistSettings()
     await window.api.queueAdd(req)
     setQueuedMsg(`Added “${showName.trim()}” (${segments.length} ep) to the queue`)
+  }
+
+  async function onSaveProject(): Promise<void> {
+    const res = await window.api.saveProject(currentProject())
+    if (res.ok) setQueuedMsg(`Saved project${res.path ? ` to ${res.path}` : ''}`)
+    else if (res.error) setQueuedMsg(`Save failed: ${res.error}`)
   }
 
   function toggleAudio(index: number): void {
@@ -90,6 +143,7 @@ export function ExportPanel({
     setExporting(true)
     setResult(null)
     setProgress(null)
+    persistSettings()
     const unsub = window.api.onExportProgress(setProgress)
     const res = await window.api.runExport(req)
     unsub()
@@ -226,6 +280,9 @@ export function ExportPanel({
         </button>
         <button className="ghost" onClick={addToQueue} disabled={!canExport}>
           ＋ Add to queue
+        </button>
+        <button className="ghost" onClick={onSaveProject} disabled={exporting}>
+          💾 Save project…
         </button>
         {queuedMsg && <span className="ok small">{queuedMsg}</span>}
       </div>

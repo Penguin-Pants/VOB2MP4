@@ -5,14 +5,19 @@ import { inspectPaths } from './inspect'
 import { extractFrame, generateFilmstrip } from './preview'
 import { runExport } from './export'
 import { addJob, clearFinished, listJobs, removeJob, runQueue } from './queue'
+import { getSettings, updateSettings } from './settings'
+import { openProject, saveProject } from './project'
 import type {
+  AppSettings,
   ExportRequest,
   ExportResult,
   FilmstripThumb,
   FrameResult,
   InspectResponse,
   PreviewSource,
-  QueueJobView
+  ProjectFile,
+  QueueJobView,
+  SettingsPatch
 } from '../shared/types'
 
 function createWindow(): void {
@@ -124,6 +129,16 @@ ipcMain.handle('queue:run', (): QueueJobView[] => {
   void runQueue()
   return listJobs()
 })
+
+// IPC: remembered settings.
+ipcMain.handle('settings:get', (): AppSettings => getSettings())
+ipcMain.handle('settings:update', (_e, patch: SettingsPatch): AppSettings =>
+  updateSettings(patch)
+)
+
+// IPC: project save/open.
+ipcMain.handle('project:save', (_e, project: ProjectFile) => saveProject(project))
+ipcMain.handle('project:open', () => openProject())
 
 app.whenReady().then(() => {
   createWindow()

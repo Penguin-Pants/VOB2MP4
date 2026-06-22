@@ -147,6 +147,35 @@ export interface ExportResult {
   error?: string
 }
 
+/** A re-openable project capturing everything to resume a program's setup. */
+export interface ProjectFile {
+  version: 1
+  source: PreviewSource
+  splitPoints: number[]
+  options: ExportOptions
+  naming: NamingOptions
+}
+
+/** Export defaults remembered between sessions to pre-fill the next job. */
+export interface LastExportSettings {
+  mode: ConvertMode
+  preset: QualityPreset
+  deinterlace: boolean
+  outputDir: string
+  showName: string
+  season: number
+  startEpisode: number
+}
+
+export interface AppSettings {
+  lastExport?: LastExportSettings
+}
+
+/** A patch for settings; `lastExport` may be partial and is deep-merged. */
+export interface SettingsPatch {
+  lastExport?: Partial<LastExportSettings>
+}
+
 export type QueueStatus = 'queued' | 'running' | 'done' | 'error'
 
 /** Lightweight view of a queued export job sent to the renderer. */
