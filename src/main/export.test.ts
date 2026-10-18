@@ -55,6 +55,17 @@ test('resolveInput: DVD title uses the dvdvideo demuxer at the disc root', async
   await r.cleanup()
 })
 
+const needsFfmpeg = { skip: !binariesPresent() && 'ffmpeg not fetched (npm run fetch-ffmpeg)' }
+
+/** Generate a short lossless test clip with the bundled ffmpeg. */
+function makeClip(dir: string, name: string, size: string): string {
+  const path = join(dir, name)
+  execFileSync(binaryPath('ffmpeg'), [
+    '-v', 'error', '-f', 'lavfi', '-i', `testsrc=d=2:s=${size}:r=25`, '-c:v', 'ffv1', path
+  ])
+  return path
+}
+
 function exportRequest(source: PreviewSource, outputDir: string): ExportRequest {
   return {
     source,
@@ -119,16 +130,12 @@ test('runExport refuses to overwrite an existing episode file', async () => {
 
 test(
   'runExport deletes the partial episode file when ffmpeg fails',
-  { skip: !binariesPresent() && 'ffmpeg not fetched (npm run fetch-ffmpeg)' },
+  needsFfmpeg,
   async () => {
     const dir = await mkdtemp(join(tmpdir(), 'vob2mp4-test-'))
     try {
       // An odd frame height makes libx264 fail after ffmpeg opens the output.
-      const input = join(dir, 'odd.mkv')
-      execFileSync(binaryPath('ffmpeg'), [
-        '-v', 'error', '-f', 'lavfi', '-i', 'testsrc=d=2:s=160x121:r=25',
-        '-c:v', 'ffv1', input
-      ])
+      const input = makeClip(dir, 'odd.mkv', '160x121')
       const source: PreviewSource = {
         ...base,
         kind: 'files',
@@ -144,3 +151,44 @@ test(
     }
   }
 )
+
+test('runExport stops and removes the episode file when cancelled', needsFfmpeg, async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'vob2mp4-test-'))
+  try {
+    const input = makeClip(dir, 'clip.mkv', '160x120')
+    const source: PreviewSource = {
+      ...base,
+      kind: 'files',
+      durationSec: 2,
+      files: [input],
+      fileDurations: [2]
+    }
+    const ctrl = new AbortController()
+    // Cancel as soon as the first episode starts.
+    const res = await runExport(exportRequest(source, dir), () => ctrl.abort(), ctrl.signal)
+    assert.equal(res.ok, false)
+    assert.match(res.error ?? '', /cancelled/i)
+    await assert.rejects(stat(join(dir, 'Season 01', 'Show - S01E01.mp4')), { code: 'ENOENT' })
+  } finally {
+    await rm(dir, { recursive: true, force: true })
+  }
+})
+
+test('runExport writes the episode when not cancelled', needsFfmpeg, async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'vob2mp4-test-'))
+  try {
+    const input = makeClip(dir, 'clip.mkv', '160x120')
+    const source: PreviewSource = {
+      ...base,
+      kind: 'files',
+      durationSec: 2,
+      files: [input],
+      fileDurations: [2]
+    }
+    const res = await runExport(exportRequest(source, dir), () => undefined, new AbortController().signal)
+    assert.equal(res.ok, true, res.error)
+    assert.ok((await stat(res.outputs[0])).size > 0)
+  } finally {
+    await rm(dir, { recursive: true, force: true })
+  }
+})

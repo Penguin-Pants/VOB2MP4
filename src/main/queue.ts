@@ -12,6 +12,8 @@ interface Job {
 
 const jobs: Job[] = []
 let running = false
+let stopRequested = false
+let currentAbort: AbortController | null = null
 
 function views(): QueueJobView[] {
   return jobs.map((j) => j.view)
@@ -77,26 +79,35 @@ export function listJobs(): QueueJobView[] {
 export async function runQueue(run: typeof runExport = runExport): Promise<void> {
   if (running) return
   running = true
+  stopRequested = false
   try {
     // Look up the next queued job each time: jobs can be added or cleared
     // while one runs, so iterating the live array would skip entries.
     for (;;) {
       const job = jobs.find((j) => j.view.status === 'queued')
-      if (!job) break
+      if (!job || stopRequested) break
       job.view.status = 'running'
       job.view.fraction = 0
       broadcast()
 
+      const abort = new AbortController()
+      currentAbort = abort
       let res: ExportResult
       try {
-        res = await run(job.request, (p: ExportProgress) => {
-          job.view.currentEpisode = p.episodeIndex + 1
-          job.view.currentEpisodeName = p.episodeName
-          job.view.fraction = p.fraction
-          broadcast()
-        })
+        res = await run(
+          job.request,
+          (p: ExportProgress) => {
+            job.view.currentEpisode = p.episodeIndex + 1
+            job.view.currentEpisodeName = p.episodeName
+            job.view.fraction = p.fraction
+            broadcast()
+          },
+          abort.signal
+        )
       } catch (e) {
         res = { ok: false, outputs: [], error: e instanceof Error ? e.message : String(e) }
+      } finally {
+        currentAbort = null
       }
 
       if (res.ok) {
@@ -112,7 +123,17 @@ export async function runQueue(run: typeof runExport = runExport): Promise<void>
     }
   } finally {
     running = false
+    stopRequested = false
   }
+}
+
+/** Cancel the running job and don't start the next one. Later jobs stay queued. */
+export function stopQueue(): QueueJobView[] {
+  if (running) {
+    stopRequested = true
+    currentAbort?.abort()
+  }
+  return views()
 }
 
 export function isRunning(): boolean {

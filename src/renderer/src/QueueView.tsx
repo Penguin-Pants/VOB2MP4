@@ -28,6 +28,11 @@ export function QueueView({
         <button onClick={() => void window.api.queueRun()} disabled={!anyQueued || anyRunning}>
           {anyRunning ? 'Running…' : '▶ Run queue'}
         </button>
+        {anyRunning && (
+          <button className="ghost" onClick={() => void window.api.queueStop()}>
+            ■ Stop
+          </button>
+        )}
         {anyFinished && (
           <button className="ghost" onClick={() => void window.api.queueClear()}>
             Clear finished

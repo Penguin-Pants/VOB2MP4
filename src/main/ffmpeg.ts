@@ -1,7 +1,7 @@
 import { app } from 'electron'
 import { join } from 'path'
 import { existsSync } from 'fs'
-import { execFile } from 'child_process'
+import { execFile, spawn, type ChildProcess } from 'child_process'
 import { promisify } from 'util'
 
 const execFileP = promisify(execFile)
@@ -51,4 +51,68 @@ export async function ffmpegVersion(): Promise<string | null> {
   } catch {
     return null
   }
+}
+
+/** Parse an ffmpeg `-progress` line (`out_time=HH:MM:SS.micros`) into seconds. */
+export function parseOutTime(line: string): number | null {
+  const m = /out_time=(\d+):(\d+):(\d+(?:\.\d+)?)/.exec(line)
+  if (!m) return null
+  return Number(m[1]) * 3600 + Number(m[2]) * 60 + Number(m[3])
+}
+
+export interface FfmpegOutput {
+  code: number | null
+  /** Collected stdout (empty when progress lines were parsed instead). */
+  stdout: Buffer
+  stderr: string
+}
+
+export interface FfmpegRun {
+  /** Settles when the process exits; rejects only if it cannot start. */
+  done: Promise<FfmpegOutput>
+  kill: () => void
+}
+
+const liveProcesses = new Set<ChildProcess>()
+
+/**
+ * Spawn the bundled ffmpeg. With `onProgressSec`, stdout is read as
+ * `-progress pipe:1` lines; otherwise stdout is collected (e.g. a JPEG).
+ */
+export function runFfmpeg(args: string[], onProgressSec?: (sec: number) => void): FfmpegRun {
+  const proc = spawn(binaryPath('ffmpeg'), args)
+  liveProcesses.add(proc)
+  const out: Buffer[] = []
+  const err: Buffer[] = []
+  let pending = ''
+  proc.stdout.on('data', (d: Buffer) => {
+    if (!onProgressSec) {
+      out.push(d)
+      return
+    }
+    pending += d.toString()
+    let nl: number
+    while ((nl = pending.indexOf('\n')) >= 0) {
+      const t = parseOutTime(pending.slice(0, nl))
+      pending = pending.slice(nl + 1)
+      if (t != null) onProgressSec(t)
+    }
+  })
+  proc.stderr.on('data', (d: Buffer) => err.push(d))
+  const done = new Promise<FfmpegOutput>((resolve, reject) => {
+    proc.on('error', (e) => {
+      liveProcesses.delete(proc)
+      reject(e)
+    })
+    proc.on('close', (code) => {
+      liveProcesses.delete(proc)
+      resolve({ code, stdout: Buffer.concat(out), stderr: Buffer.concat(err).toString() })
+    })
+  })
+  return { done, kill: () => void proc.kill() }
+}
+
+/** Kill every running ffmpeg (on app quit, so none keep running orphaned). */
+export function killAllFfmpeg(): void {
+  for (const proc of liveProcesses) proc.kill()
 }

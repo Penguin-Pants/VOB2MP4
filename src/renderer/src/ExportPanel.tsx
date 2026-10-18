@@ -290,6 +290,11 @@ export function ExportPanel({
         <button onClick={doExport} disabled={!canExport}>
           {exporting ? 'Exporting…' : `Export now (${segments.length})`}
         </button>
+        {exporting && (
+          <button className="ghost" onClick={() => void window.api.cancelExport()}>
+            Cancel
+          </button>
+        )}
         <button className="ghost" onClick={addToQueue} disabled={!canExport}>
           ＋ Add to queue
         </button>

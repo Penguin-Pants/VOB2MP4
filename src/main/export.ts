@@ -1,8 +1,7 @@
-import { spawn } from 'child_process'
 import { access, mkdir, writeFile, rm } from 'fs/promises'
 import { join, dirname } from 'path'
 import { tmpdir } from 'os'
-import { binaryPath } from './ffmpeg'
+import { runFfmpeg } from './ffmpeg'
 import { buildExportArgs } from './exportArgs'
 import { segmentsFromSplits } from '../shared/segments'
 import { episodeFileName, seasonFolderName } from '../shared/naming'
@@ -13,16 +12,23 @@ function concatLine(file: string): string {
   return `file '${file.replace(/'/g, "'\\''")}'`
 }
 
+/** ffmpeg input args + target for a DVD title (disc root = parent of VIDEO_TS). */
+export function dvdInput(source: Extract<PreviewSource, { kind: 'dvd' }>): {
+  inputArgs: string[]
+  input: string
+} {
+  return {
+    inputArgs: ['-f', 'dvdvideo', '-title', String(source.title)],
+    input: dirname(source.videoTsPath)
+  }
+}
+
 /** Resolve the ffmpeg input args + target for a source, writing a temp list if needed. */
 export async function resolveInput(
   source: PreviewSource
 ): Promise<{ inputArgs: string[]; input: string; cleanup: () => Promise<void> }> {
   if (source.kind === 'dvd') {
-    return {
-      inputArgs: ['-f', 'dvdvideo', '-title', String(source.title)],
-      input: dirname(source.videoTsPath),
-      cleanup: async () => undefined
-    }
+    return { ...dvdInput(source), cleanup: async () => undefined }
   }
   // Single-file program: use the file directly. The concat demuxer mishandles
   // input seeking far from a keyframe (it drops the video stream), which is
@@ -40,6 +46,8 @@ export async function resolveInput(
   }
 }
 
+const CANCELLED = 'Export cancelled.'
+
 async function exists(path: string): Promise<boolean> {
   try {
     await access(path)
@@ -49,49 +57,37 @@ async function exists(path: string): Promise<boolean> {
   }
 }
 
-/** Parse an ffmpeg `out_time=HH:MM:SS.micros` value into seconds. */
-function parseOutTime(line: string): number | null {
-  const m = /out_time=(\d+):(\d+):(\d+(?:\.\d+)?)/.exec(line)
-  if (!m) return null
-  return Number(m[1]) * 3600 + Number(m[2]) * 60 + Number(m[3])
-}
-
-function runOne(
+async function runOne(
   args: string[],
   durationSec: number,
-  onFraction: (f: number) => void
+  onFraction: (f: number) => void,
+  signal?: AbortSignal
 ): Promise<void> {
-  return new Promise((resolve, reject) => {
-    const proc = spawn(binaryPath('ffmpeg'), args)
-    let stdoutBuf = ''
-    const errBuf: Buffer[] = []
-    proc.stdout.on('data', (d: Buffer) => {
-      stdoutBuf += d.toString()
-      let nl: number
-      while ((nl = stdoutBuf.indexOf('\n')) >= 0) {
-        const line = stdoutBuf.slice(0, nl)
-        stdoutBuf = stdoutBuf.slice(nl + 1)
-        const t = parseOutTime(line)
-        if (t != null && durationSec > 0) onFraction(Math.min(1, t / durationSec))
-      }
-    })
-    proc.stderr.on('data', (d: Buffer) => errBuf.push(d))
-    proc.on('error', reject)
-    proc.on('close', (code) => {
-      if (code === 0) resolve()
-      else reject(new Error(Buffer.concat(errBuf).toString().trim() || `ffmpeg exit ${code}`))
-    })
+  const run = runFfmpeg(args, (t) => {
+    if (durationSec > 0) onFraction(Math.min(1, t / durationSec))
   })
+  const abort = (): void => run.kill()
+  signal?.addEventListener('abort', abort)
+  if (signal?.aborted) run.kill()
+  try {
+    const { code, stderr } = await run.done
+    // A run that finished before the abort landed keeps its episode.
+    if (code !== 0) throw new Error(signal?.aborted ? CANCELLED : stderr.trim() || `ffmpeg exit ${code}`)
+  } finally {
+    signal?.removeEventListener('abort', abort)
+  }
 }
 
 /**
  * Export every episode segment of one program to MP4, sequentially.
  * Calls `onProgress` with per-episode progress. Original inputs are never
- * modified. Returns the list of written files.
+ * modified. Returns the list of written files. Aborting `signal` stops the
+ * running episode (its file is removed) and skips the rest.
  */
 export async function runExport(
   req: ExportRequest,
-  onProgress: (p: ExportProgress) => void
+  onProgress: (p: ExportProgress) => void,
+  signal?: AbortSignal
 ): Promise<ExportResult> {
   const { source, splitPoints, options, naming } = req
   const segments = segmentsFromSplits(splitPoints, source.durationSec)
@@ -121,6 +117,7 @@ export async function runExport(
       }
     }
     for (let i = 0; i < segments.length; i++) {
+      if (signal?.aborted) return { ok: false, outputs, error: CANCELLED }
       const seg = segments[i]
       const name = names[i]
       const output = join(seasonDir, name)
@@ -151,7 +148,8 @@ export async function runExport(
             episodeName: name,
             fraction,
             status: 'running'
-          })
+          }),
+          signal
         )
       } catch (e) {
         const error = e instanceof Error ? e.message : String(e)
@@ -165,6 +163,7 @@ export async function runExport(
           status: 'error',
           error
         })
+        if (signal?.aborted) return { ok: false, outputs, error: CANCELLED }
         return { ok: false, outputs, error: `Episode ${i + 1} (${name}) failed: ${error}` }
       }
       outputs.push(output)

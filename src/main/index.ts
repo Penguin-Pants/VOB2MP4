@@ -1,10 +1,11 @@
 import { app, shell, BrowserWindow, ipcMain, dialog } from 'electron'
 import { join } from 'path'
-import { ffmpegVersion, binariesPresent } from './ffmpeg'
+import { ffmpegVersion, binariesPresent, killAllFfmpeg } from './ffmpeg'
 import { inspectPaths } from './inspect'
+import { MEDIA_EXTENSIONS } from './input'
 import { extractFrame, generateFilmstrip } from './preview'
 import { runExport } from './export'
-import { addJob, clearFinished, listJobs, removeJob, runQueue } from './queue'
+import { addJob, clearFinished, listJobs, removeJob, runQueue, stopQueue } from './queue'
 import { getSettings, updateSettings } from './settings'
 import { openProject, saveProject } from './project'
 import { cancelScan, scanBlackFrames } from './scan'
@@ -89,7 +90,7 @@ ipcMain.handle('dialog:openMediaFiles', async (): Promise<string[]> => {
     title: 'Select one or more video files (each is its own disc)',
     properties: ['openFile', 'multiSelections'],
     filters: [
-      { name: 'Video files', extensions: ['m4v', 'mp4', 'mkv', 'mov', 'avi', 'm2ts', 'mts', 'ts', 'mpg', 'mpeg', 'wmv', 'webm'] },
+      { name: 'Video files', extensions: [...MEDIA_EXTENSIONS] },
       { name: 'All files', extensions: ['*'] }
     ]
   })
@@ -130,9 +131,17 @@ ipcMain.handle('dialog:chooseOutputDir', async (): Promise<string | null> => {
 })
 
 // IPC: run an export, streaming progress back to the requesting window.
-ipcMain.handle('export:run', (e, req: ExportRequest): Promise<ExportResult> => {
-  return runExport(req, (p) => e.sender.send('export:progress', p))
+let exportAbort: AbortController | null = null
+ipcMain.handle('export:run', async (e, req: ExportRequest): Promise<ExportResult> => {
+  const abort = new AbortController()
+  exportAbort = abort
+  try {
+    return await runExport(req, (p) => e.sender.send('export:progress', p), abort.signal)
+  } finally {
+    if (exportAbort === abort) exportAbort = null
+  }
 })
+ipcMain.handle('export:cancel', (): void => exportAbort?.abort())
 
 // IPC: batch queue management (updates broadcast via 'queue:update').
 ipcMain.handle('queue:add', (_e, req: ExportRequest): QueueJobView[] => addJob(req))
@@ -143,6 +152,7 @@ ipcMain.handle('queue:run', (): QueueJobView[] => {
   void runQueue()
   return listJobs()
 })
+ipcMain.handle('queue:stop', (): QueueJobView[] => stopQueue())
 
 // IPC: remembered settings.
 ipcMain.handle('settings:get', (): AppSettings => getSettings())
@@ -171,6 +181,9 @@ app.whenReady().then(() => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()
   })
 })
+
+// Don't leave encodes running after the window is gone.
+app.on('before-quit', killAllFfmpeg)
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit()
