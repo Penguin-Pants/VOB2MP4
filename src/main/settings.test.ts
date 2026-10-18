@@ -31,6 +31,16 @@ test('mergeSettings sets lastExport from empty base', () => {
   assert.deepEqual(merged.lastExport, le)
 })
 
+test('mergeSettings never moves the saved start back for the same show', () => {
+  // A stale patch (read before a queue job finished) must not undo the job's progress.
+  const current = { lastExport: { ...le, startEpisode: 9 } }
+  assert.equal(mergeSettings(current, { lastExport: { showName: 'Show', season: 1, startEpisode: 5 } }).lastExport?.startEpisode, 9)
+  assert.equal(mergeSettings(current, { lastExport: { startEpisode: 12 } }).lastExport?.startEpisode, 12)
+  // Another show or season resets the start.
+  assert.equal(mergeSettings(current, { lastExport: { showName: 'Other', startEpisode: 1 } }).lastExport?.startEpisode, 1)
+  assert.equal(mergeSettings(current, { lastExport: { season: 2, startEpisode: 1 } }).lastExport?.startEpisode, 1)
+})
+
 test('afterCompletedExport moves the saved start past a finished job', () => {
   const naming = { showName: 'Show', season: 1, startEpisode: 5, outputDir: '/out' }
   assert.deepEqual(afterCompletedExport({ lastExport: le }, naming, 4), { lastExport: { startEpisode: 9 } })
