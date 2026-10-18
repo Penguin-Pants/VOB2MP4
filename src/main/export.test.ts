@@ -5,7 +5,7 @@ import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from 'fs/promises'
 import { execFileSync } from 'child_process'
 import { join } from 'path'
 import { tmpdir } from 'os'
-import { resolveInput, runExport, waitForExports } from './export'
+import { reservationKey, resolveInput, runExport, waitForExports } from './export'
 import { binariesPresent, binaryPath } from './ffmpeg'
 import type { ExportRequest, PreviewSource } from '../shared/types'
 
@@ -319,4 +319,12 @@ test('runExport keeps its result when the temp concat list cannot be deleted', n
     mock.restoreAll()
     await rm(dir, { recursive: true, force: true })
   }
+})
+
+test('reservationKey matches case-variant paths on Windows only', () => {
+  assert.equal(
+    reservationKey('C:\\TV\\Season 01\\Show - S01E01.mp4', 'win32'),
+    reservationKey('c:\\tv\\season 01\\show - s01e01.mp4', 'win32')
+  )
+  assert.notEqual(reservationKey('/tv/Show.mp4', 'linux'), reservationKey('/tv/show.mp4', 'linux'))
 })
