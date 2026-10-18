@@ -3,7 +3,7 @@ import { join } from 'path'
 import { ffmpegVersion, binariesPresent, killAllFfmpeg } from './ffmpeg'
 import { inspectPaths } from './inspect'
 import { MEDIA_EXTENSIONS } from './input'
-import { extractFrame, generateFilmstrip } from './preview'
+import { cancelPreview, extractFrame, generateFilmstrip } from './preview'
 import { runExport } from './export'
 import { addJob, clearFinished, listJobs, removeJob, runQueue, stopQueue } from './queue'
 import { getSettings, updateSettings } from './settings'
@@ -110,8 +110,8 @@ ipcMain.handle('input:inspect', async (_e, paths: string[]): Promise<InspectResp
 // IPC: extract a single preview frame at a timeline position.
 ipcMain.handle(
   'preview:frame',
-  (_e, source: PreviewSource, timeSec: number, accurate: boolean): Promise<FrameResult> =>
-    extractFrame(source, timeSec, accurate)
+  (_e, source: PreviewSource, timeSec: number): Promise<FrameResult> =>
+    extractFrame(source, timeSec)
 )
 
 // IPC: generate the timeline filmstrip thumbnails.
@@ -120,6 +120,9 @@ ipcMain.handle(
   (_e, source: PreviewSource, count: number): Promise<FilmstripThumb[]> =>
     generateFilmstrip(source, count)
 )
+
+// IPC: stop preview work when the preview closes or changes program.
+ipcMain.handle('preview:cancel', (): void => cancelPreview())
 
 // IPC: choose an output directory for exported episodes.
 ipcMain.handle('dialog:chooseOutputDir', async (): Promise<string | null> => {
