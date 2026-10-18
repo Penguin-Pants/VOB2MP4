@@ -86,6 +86,25 @@ function partPath(output: string): string {
   return `${output}.part`
 }
 
+/**
+ * Rename a finished .part file to its episode name. On Windows a media
+ * server or virus scanner can briefly hold the new placeholder open, and
+ * rename then fails with EPERM, EACCES or EBUSY: retry before giving up, as
+ * a failure here deletes the finished encode.
+ */
+async function publish(from: string, to: string, attempts = 5): Promise<void> {
+  for (let i = 0; ; i++) {
+    try {
+      return await rename(from, to)
+    } catch (e) {
+      const code = (e as NodeJS.ErrnoException).code
+      const locked = code === 'EPERM' || code === 'EACCES' || code === 'EBUSY'
+      if (!locked || i >= attempts - 1) throw e
+      await new Promise((r) => setTimeout(r, 200 * (i + 1)))
+    }
+  }
+}
+
 async function runOne(
   args: string[],
   durationSec: number,
@@ -218,7 +237,7 @@ async function exportProgram(
         if (signal?.aborted) return { ok: false, outputs, error: CANCELLED }
         return { ok: false, outputs, error: `Episode ${i + 1} (${name}) failed: ${error}` }
       }
-      await rename(partPath(output), output)
+      await publish(partPath(output), output)
       outputs.push(output)
       onProgress({
         episodeIndex: i,

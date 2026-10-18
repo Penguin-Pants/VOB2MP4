@@ -148,7 +148,7 @@ test('scanBlackFrames keeps its result when the temp concat list cannot be delet
     })
     const realRm = fsp.rm
     // Only the concat list delete fails (e.g. a virus scanner holds it on Windows).
-    mock.method(fsp, 'rm', async (path: string, opts?: object) => {
+    const rmMock = mock.method(fsp, 'rm', async (path: string, opts?: object) => {
       if (String(path).includes('vob2mp4-concat-')) throw new Error('EBUSY: resource busy or locked')
       return realRm(path, opts)
     })
@@ -157,6 +157,7 @@ test('scanBlackFrames keeps its result when the temp concat list cannot be delet
       0.4,
       () => undefined
     )
+    assert.ok(rmMock.mock.calls.some((c) => String(c.arguments[0]).includes('vob2mp4-concat-')))
     assert.equal(res.ok, true)
   } finally {
     mock.restoreAll()
