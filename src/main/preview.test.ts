@@ -86,3 +86,15 @@ test('cancelPreview stops a running filmstrip', needsFfmpeg, async () => {
     assert.equal((await pending).length, 0)
   })
 })
+
+test('a cancelled frame request does not start its fallback ffmpeg run', needsFfmpeg, async () => {
+  await withClip(async (source) => {
+    const pending = extractFrame(source, 1)
+    cancelPreview()
+    const res = await pending
+    assert.equal(res.ok, false)
+    if (res.ok) return
+    // Superseded, not the error of a second (fallback) capture.
+    assert.match(res.error, /Superseded/)
+  })
+})
