@@ -123,10 +123,12 @@ export default function App(): JSX.Element {
       </header>
 
       <main className="app__main">
-        {showQueue ? (
-          <QueueView jobs={queue} onBack={() => setShowQueue(false)} />
-        ) : source ? (
+        {showQueue && <QueueView jobs={queue} onBack={() => setShowQueue(false)} />}
+        {source ? (
+          // Kept mounted (only hidden) while the queue shows, so a running
+          // export keeps its progress and Cancel button.
           <Preview
+            hidden={showQueue}
             source={source}
             onBack={() => setSource(null)}
             splitPoints={splitPoints}
@@ -134,7 +136,7 @@ export default function App(): JSX.Element {
             exportInitial={exportInitial}
             exportKey={`${source.kind}:${source.label}:${source.durationSec}:${loadNonce}`}
           />
-        ) : (
+        ) : !showQueue ? (
           <>
             <section className="toolbar">
               <button onClick={() => open('folder')} disabled={busy}>
@@ -169,7 +171,7 @@ export default function App(): JSX.Element {
               </section>
             )}
           </>
-        )}
+        ) : null}
       </main>
 
       <footer className="app__footer muted small">
