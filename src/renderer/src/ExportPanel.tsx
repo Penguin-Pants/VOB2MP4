@@ -7,10 +7,12 @@ import type {
   MediaStreamInfo,
   PreviewSource,
   ProjectFile,
-  QualityPreset
+  QualityPreset,
+  SettingsPatch
 } from '../../shared/types'
 import { segmentsFromSplits } from '../../shared/segments'
-import { episodeFileName, seasonFolderName } from '../../shared/naming'
+import { exportAndRemember, queueAndRemember } from './exportFlow'
+import { episodeFileName, nextStartEpisode, seasonFolderName } from '../../shared/naming'
 
 /** Initial export config (from remembered settings or a loaded project). */
 export interface ExportInitial {
@@ -89,17 +91,19 @@ export function ExportPanel({
     }
   }
 
-  function persistSettings(): void {
-    void window.api.updateSettings({
+  function settingsToRemember(): SettingsPatch {
+    return {
       lastExport: {
         mode,
         preset,
         outputDir: outputDir ?? '',
         showName: showName.trim(),
         season,
-        startEpisode
+        // Pre-fill the next disc with the following episode number, so it
+        // doesn't clash with the episodes of this one.
+        startEpisode: nextStartEpisode(startEpisode, segments.length)
       }
-    })
+    }
   }
 
   function currentProject(): ProjectFile {
@@ -121,8 +125,7 @@ export function ExportPanel({
   async function addToQueue(): Promise<void> {
     const req = buildRequest()
     if (!req) return
-    persistSettings()
-    await window.api.queueAdd(req)
+    await queueAndRemember(window.api, req, settingsToRemember())
     setQueuedMsg(`Added “${showName.trim()}” (${segments.length} ep) to the queue`)
   }
 
@@ -149,10 +152,9 @@ export function ExportPanel({
     setExporting(true)
     setResult(null)
     setProgress(null)
-    persistSettings()
     const unsub = window.api.onExportProgress(setProgress)
     try {
-      setResult(await window.api.runExport(req))
+      setResult(await exportAndRemember(window.api, req, settingsToRemember()))
     } catch (e) {
       setResult({ ok: false, outputs: [], error: e instanceof Error ? e.message : String(e) })
     } finally {

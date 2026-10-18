@@ -1,5 +1,5 @@
 import { spawn } from 'child_process'
-import { mkdir, writeFile, rm } from 'fs/promises'
+import { mkdir, rm, stat, writeFile } from 'fs/promises'
 import { join, dirname } from 'path'
 import { tmpdir } from 'os'
 import { binaryPath } from './ffmpeg'
@@ -38,6 +38,27 @@ export async function resolveInput(
     input: listPath,
     cleanup: async () => rm(listPath, { force: true })
   }
+}
+
+/** Episode files reserved by exports running in this process. */
+const liveReservations = new Set<string>()
+
+/**
+ * Reserve an episode file as an empty placeholder ('wx' fails if it exists).
+ * An empty file that no running export owns is a placeholder left by an
+ * interrupted run (crash or kill), never a real episode, so it is reused.
+ */
+async function reserve(output: string): Promise<void> {
+  try {
+    await writeFile(output, '', { flag: 'wx' })
+  } catch (e) {
+    const stale =
+      (e as NodeJS.ErrnoException).code === 'EEXIST' &&
+      !liveReservations.has(output) &&
+      (await stat(output)).size === 0
+    if (!stale) throw e
+  }
+  liveReservations.add(output)
 }
 
 /** Parse an ffmpeg `out_time=HH:MM:SS.micros` value into seconds. */
@@ -90,6 +111,7 @@ export async function runExport(
 
   const seasonDir = join(naming.outputDir, seasonFolderName(naming.season))
   const outputs: string[] = []
+  const reserved: string[] = []
   let cleanup = async (): Promise<void> => undefined
 
   // Always resolve with a result: a rejection would leave the UI and the
@@ -99,10 +121,29 @@ export async function runExport(
     cleanup = resolved.cleanup
     const { inputArgs, input } = resolved
     await mkdir(seasonDir, { recursive: true })
+    // Never overwrite earlier work (e.g. the previous disc of the season).
+    // Reserve every episode up front ('wx' fails if the file exists), so a
+    // clash, also with a concurrent export, is found before any encoding.
+    // ffmpeg's -y then only overwrites these placeholders.
+    const names = segments.map((_, i) => episodeFileName(naming, i))
+    for (const name of names) {
+      const output = join(seasonDir, name)
+      try {
+        await reserve(output)
+      } catch (e) {
+        if ((e as NodeJS.ErrnoException).code !== 'EEXIST') throw e
+        return {
+          ok: false,
+          outputs,
+          error: `${name} already exists in ${seasonDir}. Change the start episode or move the file.`
+        }
+      }
+      reserved.push(output)
+    }
     for (let i = 0; i < segments.length; i++) {
       const seg = segments[i]
-      const name = episodeFileName(naming, i)
-      const output = join(seasonDir, name)
+      const name = names[i]
+      const output = reserved[i]
       const args = buildExportArgs({
         inputArgs,
         input,
@@ -152,6 +193,13 @@ export async function runExport(
   } catch (e) {
     return { ok: false, outputs, error: e instanceof Error ? e.message : String(e) }
   } finally {
+    // Remove every reserved episode that did not finish (failure, clash or
+    // an early error), so no empty or truncated file is left for a media
+    // server to index or to block the next export.
+    for (const path of reserved) {
+      if (!outputs.includes(path)) await rm(path, { force: true }).catch(() => undefined)
+      liveReservations.delete(path)
+    }
     // The temp concat list is disposable: failing to delete it must not
     // turn a finished export into a rejection.
     await cleanup().catch(() => undefined)

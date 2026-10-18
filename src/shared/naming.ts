@@ -36,3 +36,8 @@ export function episodeFileName(naming: NamingOptions, episodeIndex: number): st
 export function episodeRelPath(naming: NamingOptions, episodeIndex: number): string {
   return `${seasonFolderName(naming.season)}/${episodeFileName(naming, episodeIndex)}`
 }
+
+/** First episode number after exporting `episodeCount` from `startEpisode`. */
+export function nextStartEpisode(startEpisode: number, episodeCount: number): number {
+  return startEpisode + episodeCount
+}
