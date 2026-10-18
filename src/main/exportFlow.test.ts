@@ -94,3 +94,30 @@ test('nextFreeEpisode keeps the saved start when it is already past the queue', 
   assert.equal(nextFreeEpisode({ ...saved, startEpisode: 20 }, [job('a', 1, 4)]), 20)
   assert.equal(nextFreeEpisode(undefined, [job('a', 1, 4)]), undefined)
 })
+
+test('exportAndRemember waits for the settings save before it resolves', async () => {
+  let saved = false
+  const api = {
+    runExport: async (): Promise<ExportResult> => ({ ok: true, outputs: ['/out/a.mp4'] }),
+    queueAdd: async () => [],
+    updateSettings: async () => {
+      await new Promise((r) => setTimeout(r, 20))
+      saved = true
+      return {}
+    }
+  }
+  await exportAndRemember(api, req, remember)
+  assert.equal(saved, true)
+})
+
+test('a failed settings save does not turn a finished export into a failure', async () => {
+  const api = {
+    runExport: async (): Promise<ExportResult> => ({ ok: true, outputs: ['/out/a.mp4'] }),
+    queueAdd: async () => [],
+    updateSettings: async () => {
+      throw new Error('disk full')
+    }
+  }
+  const res = await exportAndRemember(api, req, remember)
+  assert.equal(res.ok, true)
+})
