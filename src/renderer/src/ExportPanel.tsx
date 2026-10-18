@@ -76,7 +76,6 @@ export function ExportPanel({
   // Leaving the program (Back) ends its export, as it ends its scan: no
   // panel would be left to show the progress or to cancel it.
   const exportingRef = useRef(false)
-  exportingRef.current = exporting
   useEffect(
     () => () => {
       if (exportingRef.current) void window.api.cancelExport()
@@ -170,6 +169,7 @@ export function ExportPanel({
   async function doExport(): Promise<void> {
     const req = buildRequest()
     if (!req) return
+    exportingRef.current = true
     setExporting(true)
     setResult(null)
     setProgress(null)
@@ -182,6 +182,7 @@ export function ExportPanel({
     } catch (e) {
       setResult({ ok: false, outputs: [], error: e instanceof Error ? e.message : String(e) })
     } finally {
+      exportingRef.current = false
       unsub()
       setExporting(false)
       setProgress(null)
