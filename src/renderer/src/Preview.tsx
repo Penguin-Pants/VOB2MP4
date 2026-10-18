@@ -9,6 +9,7 @@ const FILMSTRIP_COUNT = 16
 const SCRUB_DEBOUNCE_MS = 90
 
 export function Preview({
+  hidden = false,
   source,
   onBack,
   splitPoints,
@@ -16,6 +17,7 @@ export function Preview({
   exportInitial,
   exportKey
 }: {
+  hidden?: boolean
   source: PreviewSource
   onBack: () => void
   splitPoints: number[]
@@ -128,6 +130,7 @@ export function Preview({
   // Press "S" to add a split at the playhead (unless typing in a field).
   useEffect(() => {
     function onKey(e: KeyboardEvent): void {
+      if (hidden) return
       const tag = (document.activeElement?.tagName ?? '').toLowerCase()
       if (tag === 'input' || tag === 'select' || tag === 'textarea') return
       if (e.key.toLowerCase() === 's') {
@@ -136,10 +139,10 @@ export function Preview({
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [splitPoints, timeSec, dur, onSplitPointsChange])
+  }, [hidden, splitPoints, timeSec, dur, onSplitPointsChange])
 
   return (
-    <div className="preview">
+    <div className="preview" style={hidden ? { display: 'none' } : undefined}>
       <div className="preview__bar">
         <button className="ghost" onClick={onBack}>
           ← Back
