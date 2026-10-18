@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type {
   ConvertMode,
   ExportProgress,
@@ -72,6 +72,17 @@ export function ExportPanel({
   const [progress, setProgress] = useState<ExportProgress | null>(null)
   const [result, setResult] = useState<ExportResult | null>(null)
   const [queuedMsg, setQueuedMsg] = useState<string | null>(null)
+
+  // Leaving the program (Back) ends its export, as it ends its scan: no
+  // panel would be left to show the progress or to cancel it.
+  const exportingRef = useRef(false)
+  exportingRef.current = exporting
+  useEffect(
+    () => () => {
+      if (exportingRef.current) void window.api.cancelExport()
+    },
+    []
+  )
 
   const naming = { showName, season, startEpisode, outputDir: outputDir ?? '' }
   const canExport = !exporting && !queueing && showName.trim() !== '' && !!outputDir && segments.length > 0
