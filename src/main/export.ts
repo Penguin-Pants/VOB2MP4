@@ -90,9 +90,14 @@ export async function runExport(
 
   const seasonDir = join(naming.outputDir, seasonFolderName(naming.season))
   const outputs: string[] = []
-  const { inputArgs, input, cleanup } = await resolveInput(source)
+  let cleanup = async (): Promise<void> => undefined
 
+  // Always resolve with a result: a rejection would leave the UI and the
+  // queue stuck in "running".
   try {
+    const resolved = await resolveInput(source)
+    cleanup = resolved.cleanup
+    const { inputArgs, input } = resolved
     await mkdir(seasonDir, { recursive: true })
     for (let i = 0; i < segments.length; i++) {
       const seg = segments[i]
@@ -144,6 +149,8 @@ export async function runExport(
         status: 'done'
       })
     }
+  } catch (e) {
+    return { ok: false, outputs, error: e instanceof Error ? e.message : String(e) }
   } finally {
     await cleanup()
   }
