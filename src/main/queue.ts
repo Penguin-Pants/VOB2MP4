@@ -2,7 +2,7 @@ import { randomUUID } from 'crypto'
 import { BrowserWindow } from 'electron'
 import { runExport } from './export'
 import { segmentsFromSplits } from '../shared/segments'
-import type { ExportProgress, ExportRequest, QueueJobView } from '../shared/types'
+import type { ExportProgress, ExportRequest, ExportResult, QueueJobView } from '../shared/types'
 
 interface Job {
   id: string
@@ -70,23 +70,34 @@ export function listJobs(): QueueJobView[] {
   return views()
 }
 
-/** Process all queued jobs sequentially. Safe to call again; no-op if running. */
-export async function runQueue(): Promise<void> {
+/**
+ * Process all queued jobs sequentially. Safe to call again; no-op if running.
+ * `run` is injectable for tests.
+ */
+export async function runQueue(run: typeof runExport = runExport): Promise<void> {
   if (running) return
   running = true
   try {
-    for (const job of jobs) {
-      if (job.view.status !== 'queued') continue
+    // Look up the next queued job each time: jobs can be added or cleared
+    // while one runs, so iterating the live array would skip entries.
+    for (;;) {
+      const job = jobs.find((j) => j.view.status === 'queued')
+      if (!job) break
       job.view.status = 'running'
       job.view.fraction = 0
       broadcast()
 
-      const res = await runExport(job.request, (p: ExportProgress) => {
-        job.view.currentEpisode = p.episodeIndex + 1
-        job.view.currentEpisodeName = p.episodeName
-        job.view.fraction = p.fraction
-        broadcast()
-      })
+      let res: ExportResult
+      try {
+        res = await run(job.request, (p: ExportProgress) => {
+          job.view.currentEpisode = p.episodeIndex + 1
+          job.view.currentEpisodeName = p.episodeName
+          job.view.fraction = p.fraction
+          broadcast()
+        })
+      } catch (e) {
+        res = { ok: false, outputs: [], error: e instanceof Error ? e.message : String(e) }
+      }
 
       if (res.ok) {
         job.view.status = 'done'

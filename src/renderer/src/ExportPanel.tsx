@@ -151,11 +151,15 @@ export function ExportPanel({
     setProgress(null)
     persistSettings()
     const unsub = window.api.onExportProgress(setProgress)
-    const res = await window.api.runExport(req)
-    unsub()
-    setExporting(false)
-    setProgress(null)
-    setResult(res)
+    try {
+      setResult(await window.api.runExport(req))
+    } catch (e) {
+      setResult({ ok: false, outputs: [], error: e instanceof Error ? e.message : String(e) })
+    } finally {
+      unsub()
+      setExporting(false)
+      setProgress(null)
+    }
   }
 
   const overall = progress

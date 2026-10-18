@@ -1,8 +1,10 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { readFile } from 'fs/promises'
-import { resolveInput } from './export'
-import type { PreviewSource } from '../shared/types'
+import { mkdtemp, readFile, rm, writeFile } from 'fs/promises'
+import { join } from 'path'
+import { tmpdir } from 'os'
+import { resolveInput, runExport } from './export'
+import type { ExportRequest, PreviewSource } from '../shared/types'
 
 const base = { label: 'x', frameRate: null, streams: [] }
 
@@ -49,4 +51,70 @@ test('resolveInput: DVD title uses the dvdvideo demuxer at the disc root', async
   assert.deepEqual(r.inputArgs, ['-f', 'dvdvideo', '-title', '3'])
   assert.equal(r.input, '/discs/MyDisc')
   await r.cleanup()
+})
+
+function exportRequest(source: PreviewSource, outputDir: string): ExportRequest {
+  return {
+    source,
+    splitPoints: [],
+    options: {
+      mode: 'reencode',
+      preset: 'balanced',
+      deinterlace: false,
+      audioStreamIndices: [],
+      burnSubtitleOrdinal: null
+    },
+    naming: { showName: 'Show', season: 1, startEpisode: 1, outputDir }
+  }
+}
+
+test('runExport resolves with an error when the season folder cannot be created', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'vob2mp4-test-'))
+  try {
+    // A plain file where the output folder should be makes mkdir fail.
+    const blocker = join(dir, 'not-a-dir')
+    await writeFile(blocker, '')
+    const source: PreviewSource = {
+      ...base,
+      kind: 'files',
+      durationSec: 10,
+      files: [join(dir, 'in.vob')],
+      fileDurations: [10]
+    }
+    const res = await runExport(exportRequest(source, blocker), () => undefined)
+    assert.equal(res.ok, false)
+    assert.deepEqual(res.outputs, [])
+    assert.ok(res.error && res.error.length > 0)
+  } finally {
+    await rm(dir, { recursive: true, force: true })
+  }
+})
+
+test('runExport resolves with an error when the concat list cannot be written', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'vob2mp4-test-'))
+  const blocker = join(dir, 'not-a-dir')
+  // os.tmpdir() reads TMPDIR on POSIX and TEMP/TMP on Windows.
+  const vars = ['TMPDIR', 'TEMP', 'TMP'] as const
+  const saved = vars.map((v) => process.env[v])
+  try {
+    await writeFile(blocker, '')
+    for (const v of vars) process.env[v] = blocker
+    const source: PreviewSource = {
+      ...base,
+      kind: 'files',
+      durationSec: 10,
+      files: [join(dir, 'a.vob'), join(dir, 'b.vob')],
+      fileDurations: [5, 5]
+    }
+    const res = await runExport(exportRequest(source, dir), () => undefined)
+    assert.equal(res.ok, false)
+    assert.deepEqual(res.outputs, [])
+    assert.ok(res.error && res.error.length > 0)
+  } finally {
+    vars.forEach((v, i) => {
+      if (saved[i] === undefined) delete process.env[v]
+      else process.env[v] = saved[i]
+    })
+    await rm(dir, { recursive: true, force: true })
+  }
 })
