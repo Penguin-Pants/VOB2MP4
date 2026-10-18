@@ -103,6 +103,8 @@ export async function scanBlackFrames(
     return { ok: false, error: e instanceof Error ? e.message : String(e) }
   } finally {
     if (currentScan === scan) currentScan = null
-    await cleanup()
+    // The temp concat list is disposable: a failed delete must not turn the
+    // scan result into a rejection (the UI would stay in "Scanning…").
+    await cleanup().catch(() => undefined)
   }
 }
