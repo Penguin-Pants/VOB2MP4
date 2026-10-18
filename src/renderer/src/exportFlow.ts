@@ -37,10 +37,20 @@ export async function exportAndRemember(
   // Also after a partial failure: the episodes already written stay on disk,
   // so the next disc must start after them.
   if (res.outputs.length > 0) {
-    const startEpisode = nextStartEpisode(req.naming.startEpisode, res.outputs.length)
+    const next = nextStartEpisode(req.naming.startEpisode, res.outputs.length)
+    const saved = await savedStartFor(api, req)
+    // Redoing an earlier episode must not move the saved start back.
+    const startEpisode = saved != null ? Math.max(saved, next) : next
     await saveSettings(api, { ...remember, lastExport: { ...remember.lastExport, startEpisode } })
   }
   return res
+}
+
+/** The saved start episode, if it belongs to the same show and season as `req`. */
+async function savedStartFor(api: ExportFlowApi, req: ExportRequest): Promise<number | undefined> {
+  const last = (await api.getSettings().catch((): AppSettings => ({}))).lastExport
+  const sameShow = last?.showName === req.naming.showName && last?.season === req.naming.season
+  return sameShow ? last.startEpisode : undefined
 }
 
 /**
@@ -48,7 +58,8 @@ export async function exportAndRemember(
  * queue lives only in memory, so a queued job never moves the saved start
  * forward: its numbers are saved when it finishes (main process) and the
  * pre-fill for the next disc comes from the live queue (nextFreeEpisode).
- * The saved start only moves back, or resets for another show or season.
+ * The saved start is kept for the same show and season, and resets to the
+ * job start for another show or season.
  */
 export async function queueAndRemember(
   api: ExportFlowApi,
@@ -56,9 +67,7 @@ export async function queueAndRemember(
   remember: SettingsPatch
 ): Promise<void> {
   await api.queueAdd(req)
-  const last = (await api.getSettings().catch((): AppSettings => ({}))).lastExport
-  const sameShow = last?.showName === req.naming.showName && last?.season === req.naming.season
-  const startEpisode = sameShow ? Math.min(last.startEpisode, req.naming.startEpisode) : req.naming.startEpisode
+  const startEpisode = (await savedStartFor(api, req)) ?? req.naming.startEpisode
   await saveSettings(api, { ...remember, lastExport: { ...remember.lastExport, startEpisode } })
 }
 
