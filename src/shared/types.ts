@@ -197,6 +197,8 @@ export interface QueueJobView {
   label: string
   showName: string
   season: number
+  /** First episode number this job writes. */
+  startEpisode: number
   episodeCount: number
   status: QueueStatus
   /** 1-based episode currently exporting (when running). */

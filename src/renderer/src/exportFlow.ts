@@ -1,4 +1,11 @@
-import type { ExportRequest, ExportResult, QueueJobView, SettingsPatch } from '../../shared/types'
+import type {
+  AppSettings,
+  ExportRequest,
+  ExportResult,
+  QueueJobView,
+  SettingsPatch
+} from '../../shared/types'
+import { nextStartEpisode } from '../../shared/naming'
 
 /** The part of window.api the export flows use (injectable for tests). */
 export interface ExportFlowApi {
@@ -29,4 +36,28 @@ export async function queueAndRemember(
 ): Promise<void> {
   await api.queueAdd(req)
   void api.updateSettings(remember)
+}
+
+export interface QueueRemoveApi {
+  queueRemove: (id: string) => Promise<QueueJobView[]>
+  getSettings: () => Promise<AppSettings>
+  updateSettings: (patch: SettingsPatch) => Promise<unknown>
+}
+
+/**
+ * Remove a queued job. If the saved start episode still points just past
+ * this job (nothing was added after it), give its numbers back, so the next
+ * disc does not skip episodes that will never be exported.
+ */
+export async function removeQueuedJob(api: QueueRemoveApi, job: QueueJobView): Promise<void> {
+  await api.queueRemove(job.id)
+  const last = (await api.getSettings()).lastExport
+  if (
+    last &&
+    last.showName === job.showName &&
+    last.season === job.season &&
+    last.startEpisode === nextStartEpisode(job.startEpisode, job.episodeCount)
+  ) {
+    void api.updateSettings({ lastExport: { startEpisode: job.startEpisode } })
+  }
 }
