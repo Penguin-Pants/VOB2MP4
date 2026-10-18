@@ -1,5 +1,5 @@
 import { spawn } from 'child_process'
-import { mkdir, writeFile, rm } from 'fs/promises'
+import { mkdir, rm, stat, writeFile } from 'fs/promises'
 import { join, dirname } from 'path'
 import { tmpdir } from 'os'
 import { binaryPath } from './ffmpeg'
@@ -38,6 +38,27 @@ export async function resolveInput(
     input: listPath,
     cleanup: async () => rm(listPath, { force: true })
   }
+}
+
+/** Episode files reserved by exports running in this process. */
+const liveReservations = new Set<string>()
+
+/**
+ * Reserve an episode file as an empty placeholder ('wx' fails if it exists).
+ * An empty file that no running export owns is a placeholder left by an
+ * interrupted run (crash or kill), never a real episode, so it is reused.
+ */
+async function reserve(output: string): Promise<void> {
+  try {
+    await writeFile(output, '', { flag: 'wx' })
+  } catch (e) {
+    const stale =
+      (e as NodeJS.ErrnoException).code === 'EEXIST' &&
+      !liveReservations.has(output) &&
+      (await stat(output)).size === 0
+    if (!stale) throw e
+  }
+  liveReservations.add(output)
 }
 
 /** Parse an ffmpeg `out_time=HH:MM:SS.micros` value into seconds. */
@@ -108,7 +129,7 @@ export async function runExport(
     for (const name of names) {
       const output = join(seasonDir, name)
       try {
-        await writeFile(output, '', { flag: 'wx' })
+        await reserve(output)
       } catch (e) {
         if ((e as NodeJS.ErrnoException).code !== 'EEXIST') throw e
         return {
@@ -177,6 +198,7 @@ export async function runExport(
     // server to index or to block the next export.
     for (const path of reserved) {
       if (!outputs.includes(path)) await rm(path, { force: true }).catch(() => undefined)
+      liveReservations.delete(path)
     }
     // The temp concat list is disposable: failing to delete it must not
     // turn a finished export into a rejection.
