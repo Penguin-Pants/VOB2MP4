@@ -30,3 +30,12 @@ test('mergeSettings sets lastExport from empty base', () => {
   const merged = mergeSettings({}, { lastExport: le })
   assert.deepEqual(merged.lastExport, le)
 })
+
+test('mergeSettings deep-merges remembered dialog folders', () => {
+  const merged = mergeSettings(
+    { lastExport: le, lastDirs: { input: '/discs', output: '/tv' } },
+    { lastDirs: { input: '/discs2' } }
+  )
+  assert.deepEqual(merged.lastDirs, { input: '/discs2', output: '/tv' })
+  assert.deepEqual(merged.lastExport, le)
+})
