@@ -48,8 +48,16 @@ export async function resolveInput(
 
 const CANCELLED = 'Export cancelled.'
 
-/** Episode files reserved by exports running in this process. */
+/** Episode files reserved by exports running in this process (by reservationKey). */
 const liveReservations = new Set<string>()
+
+/**
+ * The key a reserved path is tracked under. Windows file names are
+ * case-insensitive, so "Show" and "show" are the same file there.
+ */
+export function reservationKey(path: string, platform: NodeJS.Platform = process.platform): string {
+  return platform === 'win32' ? path.toLowerCase() : path
+}
 
 /**
  * Reserve an episode file as an empty placeholder ('wx' fails if it exists).
@@ -62,11 +70,11 @@ async function reserve(output: string): Promise<void> {
   } catch (e) {
     const stale =
       (e as NodeJS.ErrnoException).code === 'EEXIST' &&
-      !liveReservations.has(output) &&
+      !liveReservations.has(reservationKey(output)) &&
       (await stat(output)).size === 0
     if (!stale) throw e
   }
-  liveReservations.add(output)
+  liveReservations.add(reservationKey(output))
 }
 
 async function runOne(
@@ -215,7 +223,7 @@ async function exportProgram(
     // a media server to index or to block the next export.
     for (const path of reserved) {
       if (!outputs.includes(path)) await rm(path, { force: true }).catch(() => undefined)
-      liveReservations.delete(path)
+      liveReservations.delete(reservationKey(path))
     }
     // The temp concat list is disposable: failing to delete it must not
     // turn a finished export into a rejection.

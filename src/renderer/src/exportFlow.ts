@@ -1,7 +1,7 @@
 import type {
-  AppSettings,
   ExportRequest,
   ExportResult,
+  LastExportSettings,
   QueueJobView,
   SettingsPatch
 } from '../../shared/types'
@@ -28,36 +28,41 @@ export async function exportAndRemember(
   return res
 }
 
-/** Add to the queue; remember the settings only once the job is accepted. */
+/**
+ * Add to the queue and remember the settings once the job is accepted, but
+ * with the job's own start episode, not the advanced one: the queue lives
+ * only in memory, so its numbers are saved when a job finishes (main
+ * process) and the pre-fill for the next disc comes from the live queue
+ * (nextFreeEpisode).
+ */
 export async function queueAndRemember(
   api: ExportFlowApi,
   req: ExportRequest,
   remember: SettingsPatch
 ): Promise<void> {
   await api.queueAdd(req)
-  void api.updateSettings(remember)
-}
-
-export interface QueueRemoveApi {
-  queueRemove: (id: string) => Promise<QueueJobView[]>
-  getSettings: () => Promise<AppSettings>
-  updateSettings: (patch: SettingsPatch) => Promise<unknown>
+  void api.updateSettings({
+    ...remember,
+    lastExport: { ...remember.lastExport, startEpisode: req.naming.startEpisode }
+  })
 }
 
 /**
- * Remove a queued job. If the saved start episode still points just past
- * this job (nothing was added after it), give its numbers back, so the next
- * disc does not skip episodes that will never be exported.
+ * The start episode to pre-fill for the next disc: past the saved start and
+ * past every queued, running or finished job of the same show and season.
+ * Derived from the live queue each time, so removing jobs (in any order)
+ * gives their numbers back by itself.
  */
-export async function removeQueuedJob(api: QueueRemoveApi, job: QueueJobView): Promise<void> {
-  await api.queueRemove(job.id)
-  const last = (await api.getSettings()).lastExport
-  if (
-    last &&
-    last.showName === job.showName &&
-    last.season === job.season &&
-    last.startEpisode === nextStartEpisode(job.startEpisode, job.episodeCount)
-  ) {
-    void api.updateSettings({ lastExport: { startEpisode: job.startEpisode } })
+export function nextFreeEpisode(
+  saved: LastExportSettings | undefined,
+  jobs: QueueJobView[]
+): number | undefined {
+  if (!saved) return undefined
+  let next = saved.startEpisode
+  for (const job of jobs) {
+    if (job.status === 'error') continue
+    if (job.showName !== saved.showName || job.season !== saved.season) continue
+    next = Math.max(next, nextStartEpisode(job.startEpisode, job.episodeCount))
   }
+  return next
 }
