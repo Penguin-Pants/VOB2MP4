@@ -32,3 +32,14 @@ test('killAllFfmpeg stops running processes', needsFfmpeg, async () => {
   setTimeout(killAllFfmpeg, 100)
   assert.notEqual((await run.done).code, 0)
 })
+
+test('runFfmpeg keeps running when a progress listener throws', needsFfmpeg, async () => {
+  // E.g. sending progress to a window that was just closed.
+  const run = runFfmpeg(
+    ['-v', 'error', '-progress', 'pipe:1', '-f', 'lavfi', '-i', 'testsrc=d=1:s=64x48', '-f', 'null', '-'],
+    () => {
+      throw new Error('Object has been destroyed')
+    }
+  )
+  assert.equal((await run.done).code, 0)
+})
