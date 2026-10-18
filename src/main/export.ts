@@ -179,7 +179,9 @@ export async function runExport(
   } catch (e) {
     return { ok: false, outputs, error: e instanceof Error ? e.message : String(e) }
   } finally {
-    await cleanup()
+    // The temp concat list is disposable: failing to delete it must not
+    // turn a finished export into a rejection.
+    await cleanup().catch(() => undefined)
   }
 
   return { ok: true, outputs }
