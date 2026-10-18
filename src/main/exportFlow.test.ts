@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { exportAndRemember, queueAndRemember, removeQueuedJob } from '../renderer/src/exportFlow'
+import { exportAndRemember, nextFreeEpisode, queueAndRemember } from '../renderer/src/exportFlow'
 import type { AppSettings, ExportRequest, ExportResult, QueueJobView, SettingsPatch } from '../shared/types'
 
 const req = {} as ExportRequest
@@ -41,67 +41,56 @@ test('exportAndRemember keeps the saved start episode when the export fails', as
   assert.deepEqual(saved, [])
 })
 
-test('queueAndRemember saves only after the job is accepted', async () => {
+test('queueAndRemember saves the job start, not the advanced start episode', async () => {
+  // The queue lives in memory: its numbers are only taken once a job finishes.
   const ok = fakeApi({ ok: true, outputs: [] })
-  await queueAndRemember(ok.api, req, remember)
-  assert.deepEqual(ok.saved, [remember])
+  const queued = { naming: { showName: 'Show', season: 1, startEpisode: 1, outputDir: '/tv' } } as ExportRequest
+  await queueAndRemember(ok.api, queued, { lastExport: { startEpisode: 5, showName: 'Show' } })
+  assert.deepEqual(ok.saved, [{ lastExport: { startEpisode: 1, showName: 'Show' } }])
 
   const failed = fakeApi(new Error('IPC failed'))
-  await assert.rejects(queueAndRemember(failed.api, req, remember))
+  await assert.rejects(queueAndRemember(failed.api, queued, remember))
   assert.deepEqual(failed.saved, [])
 })
 
-const job: QueueJobView = {
-  id: 'j1',
-  label: 'Disc 2',
-  showName: 'Show',
-  season: 1,
-  startEpisode: 5,
-  episodeCount: 4,
-  status: 'queued',
-  fraction: 0,
-  outputs: []
-}
 
-function queueApi(settings: AppSettings) {
-  const saved: SettingsPatch[] = []
-  const removed: string[] = []
+function job(id: string, startEpisode: number, episodeCount: number, extra: Partial<QueueJobView> = {}): QueueJobView {
   return {
-    saved,
-    removed,
-    api: {
-      queueRemove: async (id: string) => {
-        removed.push(id)
-        return []
-      },
-      getSettings: async () => settings,
-      updateSettings: async (p: SettingsPatch) => {
-        saved.push(p)
-        return {}
-      }
-    }
+    id,
+    label: id,
+    showName: 'Show',
+    season: 1,
+    startEpisode,
+    episodeCount,
+    status: 'queued',
+    fraction: 0,
+    outputs: [],
+    ...extra
   }
 }
 
-const lastExport = {
-  mode: 'reencode' as const,
-  preset: 'balanced' as const,
-  outputDir: '/tv',
-  showName: 'Show',
-  season: 1
-}
+const saved = { mode: 'reencode' as const, preset: 'balanced' as const, outputDir: '/tv', showName: 'Show', season: 1, startEpisode: 1 }
 
-test('removeQueuedJob gives back the episode numbers the removed job had taken', async () => {
-  // Adding the job moved the saved start from 5 to 9.
-  const q = queueApi({ lastExport: { ...lastExport, startEpisode: 9 } })
-  await removeQueuedJob(q.api, job)
-  assert.deepEqual(q.removed, ['j1'])
-  assert.deepEqual(q.saved, [{ lastExport: { startEpisode: 5 } }])
+test('nextFreeEpisode starts after the queued jobs of the same show and season', () => {
+  assert.equal(nextFreeEpisode(saved, [job('a', 1, 4), job('b', 5, 4)]), 9)
 })
 
-test('removeQueuedJob keeps the saved start when a later job already moved it', async () => {
-  const q = queueApi({ lastExport: { ...lastExport, startEpisode: 13 } })
-  await removeQueuedJob(q.api, job)
-  assert.deepEqual(q.removed, ['j1'])
-  assert.deepEqual(q.saved, [])
+test('nextFreeEpisode follows the live queue, so removal order does not matter', () => {
+  // Remove the first job, then the second: the queue is empty again.
+  assert.equal(nextFreeEpisode(saved, [job('b', 5, 4)]), 9)
+  assert.equal(nextFreeEpisode(saved, []), 1)
+})
+
+test('nextFreeEpisode ignores other shows, other seasons and failed jobs', () => {
+  const jobs = [
+    job('x', 1, 10, { showName: 'Other' }),
+    job('y', 1, 10, { season: 2 }),
+    job('z', 1, 10, { status: 'error' })
+  ]
+  assert.equal(nextFreeEpisode(saved, jobs), 1)
+})
+
+test('nextFreeEpisode keeps the saved start when it is already past the queue', () => {
+  assert.equal(nextFreeEpisode({ ...saved, startEpisode: 20 }, [job('a', 1, 4)]), 20)
+  assert.equal(nextFreeEpisode(undefined, [job('a', 1, 4)]), undefined)
 })
