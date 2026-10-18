@@ -4,7 +4,7 @@ import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from 'fs/promises'
 import { execFileSync } from 'child_process'
 import { join } from 'path'
 import { tmpdir } from 'os'
-import { resolveInput, runExport } from './export'
+import { resolveInput, runExport, waitForExports } from './export'
 import { binariesPresent, binaryPath } from './ffmpeg'
 import type { ExportRequest, PreviewSource } from '../shared/types'
 
@@ -120,8 +120,9 @@ test('runExport refuses to overwrite an existing episode file', async () => {
     const res = await runExport(req, () => undefined)
     assert.equal(res.ok, false)
     assert.match(res.error ?? '', /S01E02/)
-    // Nothing was encoded and the earlier file is untouched.
+    // Nothing was encoded, no placeholder is left and the earlier file is untouched.
     assert.deepEqual(res.outputs, [])
+    await assert.rejects(stat(join(dir, 'Season 01', 'Show - S01E01.mp4')), { code: 'ENOENT' })
     assert.equal(await readFile(existing, 'utf8'), 'earlier disc')
   } finally {
     await rm(dir, { recursive: true, force: true })
@@ -188,6 +189,87 @@ test('runExport writes the episode when not cancelled', needsFfmpeg, async () =>
     const res = await runExport(exportRequest(source, dir), () => undefined, new AbortController().signal)
     assert.equal(res.ok, true, res.error)
     assert.ok((await stat(res.outputs[0])).size > 0)
+  } finally {
+    await rm(dir, { recursive: true, force: true })
+  }
+})
+
+test('runExport resolves with an error when the concat list cannot be written', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'vob2mp4-test-'))
+  const blocker = join(dir, 'not-a-dir')
+  // os.tmpdir() reads TMPDIR on POSIX and TEMP/TMP on Windows.
+  const vars = ['TMPDIR', 'TEMP', 'TMP'] as const
+  const saved = vars.map((v) => process.env[v])
+  try {
+    await writeFile(blocker, '')
+    for (const v of vars) process.env[v] = blocker
+    const source: PreviewSource = {
+      ...base,
+      kind: 'files',
+      durationSec: 10,
+      files: [join(dir, 'a.vob'), join(dir, 'b.vob')],
+      fileDurations: [5, 5]
+    }
+    const res = await runExport(exportRequest(source, dir), () => undefined)
+    assert.equal(res.ok, false)
+    assert.deepEqual(res.outputs, [])
+    assert.ok(res.error && res.error.length > 0)
+  } finally {
+    vars.forEach((v, i) => {
+      if (saved[i] === undefined) delete process.env[v]
+      else process.env[v] = saved[i]
+    })
+    await rm(dir, { recursive: true, force: true })
+  }
+})
+
+test('runExport removes its reserved files when it fails before encoding', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'vob2mp4-test-'))
+  try {
+    const source: PreviewSource = {
+      ...base,
+      kind: 'files',
+      durationSec: 100,
+      files: [join(dir, 'in.vob')],
+      fileDurations: [100]
+    }
+    const req = { ...exportRequest(source, dir), splitPoints: [50] }
+    const res = await runExport(req, () => {
+      throw new Error('progress listener broke')
+    })
+    assert.equal(res.ok, false)
+    for (const ep of ['E01', 'E02']) {
+      await assert.rejects(stat(join(dir, 'Season 01', `Show - S01${ep}.mp4`)), { code: 'ENOENT' })
+    }
+  } finally {
+    await rm(dir, { recursive: true, force: true })
+  }
+})
+
+test('waitForExports resolves when no export runs', async () => {
+  await waitForExports()
+})
+
+test('waitForExports waits until a cancelled export removed its files', needsFfmpeg, async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'vob2mp4-test-'))
+  try {
+    const input = makeClip(dir, 'clip.mkv', '160x120')
+    const source: PreviewSource = {
+      ...base,
+      kind: 'files',
+      durationSec: 2,
+      files: [input],
+      fileDurations: [2]
+    }
+    const ctrl = new AbortController()
+    // Like app quit: abort, then wait without holding the export promise.
+    let finished = false
+    void runExport(exportRequest(source, dir), () => ctrl.abort(), ctrl.signal).then(() => {
+      finished = true
+    })
+    await waitForExports()
+    assert.equal(finished, true)
+    await assert.rejects(stat(join(dir, 'Season 01', 'Show - S01E01.mp4')), { code: 'ENOENT' })
   } finally {
     await rm(dir, { recursive: true, force: true })
   }

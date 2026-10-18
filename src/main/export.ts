@@ -1,4 +1,4 @@
-import { access, mkdir, writeFile, rm } from 'fs/promises'
+import { mkdir, writeFile, rm } from 'fs/promises'
 import { join, dirname } from 'path'
 import { tmpdir } from 'os'
 import { runFfmpeg } from './ffmpeg'
@@ -48,15 +48,6 @@ export async function resolveInput(
 
 const CANCELLED = 'Export cancelled.'
 
-async function exists(path: string): Promise<boolean> {
-  try {
-    await access(path)
-    return true
-  } catch {
-    return false
-  }
-}
-
 async function runOne(
   args: string[],
   durationSec: number,
@@ -82,9 +73,27 @@ async function runOne(
  * Export every episode segment of one program to MP4, sequentially.
  * Calls `onProgress` with per-episode progress. Original inputs are never
  * modified. Returns the list of written files. Aborting `signal` stops the
- * running episode (its file is removed) and skips the rest.
+ * running episode and skips the rest; unfinished episode files are removed.
  */
-export async function runExport(
+export function runExport(
+  req: ExportRequest,
+  onProgress: (p: ExportProgress) => void,
+  signal?: AbortSignal
+): Promise<ExportResult> {
+  const run = exportProgram(req, onProgress, signal)
+  activeExports.add(run)
+  void run.finally(() => activeExports.delete(run))
+  return run
+}
+
+const activeExports = new Set<Promise<ExportResult>>()
+
+/** Resolves once every running export has finished, including its file cleanup. */
+export async function waitForExports(): Promise<void> {
+  await Promise.allSettled([...activeExports])
+}
+
+async function exportProgram(
   req: ExportRequest,
   onProgress: (p: ExportProgress) => void,
   signal?: AbortSignal
@@ -95,6 +104,7 @@ export async function runExport(
 
   const seasonDir = join(naming.outputDir, seasonFolderName(naming.season))
   const outputs: string[] = []
+  const reserved: string[] = []
   let cleanup = async (): Promise<void> => undefined
 
   // Always resolve with a result: a rejection would leave the UI and the
@@ -105,26 +115,29 @@ export async function runExport(
     const { inputArgs, input } = resolved
     await mkdir(seasonDir, { recursive: true })
     // Never overwrite earlier work (e.g. the previous disc of the season).
-    // Check every episode first so nothing is encoded when one clashes.
+    // Reserve every episode up front ('wx' fails if the file exists), so a
+    // clash, also with a concurrent export, is found before any encoding.
+    // ffmpeg's -y then only overwrites these placeholders.
     const names = segments.map((_, i) => episodeFileName(naming, i))
     for (const name of names) {
-      if (await exists(join(seasonDir, name))) {
+      const output = join(seasonDir, name)
+      try {
+        await writeFile(output, '', { flag: 'wx' })
+      } catch (e) {
+        if ((e as NodeJS.ErrnoException).code !== 'EEXIST') throw e
         return {
           ok: false,
           outputs,
           error: `${name} already exists in ${seasonDir}. Change the start episode or move the file.`
         }
       }
+      reserved.push(output)
     }
     for (let i = 0; i < segments.length; i++) {
       if (signal?.aborted) return { ok: false, outputs, error: CANCELLED }
       const seg = segments[i]
       const name = names[i]
-      const output = join(seasonDir, name)
-      // Reserve the file atomically ('wx' fails if it exists). ffmpeg's -y
-      // then only overwrites this placeholder, so a failed episode can be
-      // deleted without touching anyone else's file.
-      await writeFile(output, '', { flag: 'wx' })
+      const output = reserved[i]
       const args = buildExportArgs({
         inputArgs,
         input,
@@ -153,8 +166,6 @@ export async function runExport(
         )
       } catch (e) {
         const error = e instanceof Error ? e.message : String(e)
-        // Don't leave a truncated episode for a media server to index.
-        await rm(output, { force: true })
         onProgress({
           episodeIndex: i,
           totalEpisodes: segments.length,
@@ -178,7 +189,15 @@ export async function runExport(
   } catch (e) {
     return { ok: false, outputs, error: e instanceof Error ? e.message : String(e) }
   } finally {
-    await cleanup()
+    // Remove every reserved episode that did not finish (failure, clash,
+    // cancel or an early error), so no empty or truncated file is left for
+    // a media server to index or to block the next export.
+    for (const path of reserved) {
+      if (!outputs.includes(path)) await rm(path, { force: true }).catch(() => undefined)
+    }
+    // The temp concat list is disposable: failing to delete it must not
+    // turn a finished export into a rejection.
+    await cleanup().catch(() => undefined)
   }
 
   return { ok: true, outputs }
