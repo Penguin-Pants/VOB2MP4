@@ -38,6 +38,7 @@ function makeView(id: string, request: ExportRequest): QueueJobView {
     label: request.source.label,
     showName: request.naming.showName,
     season: request.naming.season,
+    startEpisode: request.naming.startEpisode,
     episodeCount,
     status: 'queued',
     fraction: 0,

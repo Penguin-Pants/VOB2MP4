@@ -177,6 +177,16 @@ ipcMain.handle('shell:showItem', (_e, path: string): void => {
   if (path) shell.showItemInFolder(path)
 })
 
+// One app instance only: a second one could reclaim this one's episode
+// placeholders (they look like stale leftovers to another process).
+if (!app.requestSingleInstanceLock()) app.exit(0)
+app.on('second-instance', () => {
+  const win = BrowserWindow.getAllWindows()[0]
+  if (!win) return
+  if (win.isMinimized()) win.restore()
+  win.focus()
+})
+
 app.whenReady().then(() => {
   createWindow()
   app.on('activate', () => {
