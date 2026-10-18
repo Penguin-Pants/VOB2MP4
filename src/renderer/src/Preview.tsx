@@ -126,7 +126,9 @@ export function Preview({
   // The scan runs for minutes: read split points at the end, not at the start,
   // so splits added meanwhile are kept.
   const splitPointsRef = useRef(splitPoints)
-  splitPointsRef.current = splitPoints
+  useEffect(() => {
+    splitPointsRef.current = splitPoints
+  }, [splitPoints])
   const scanGen = useRef(0)
   useEffect(() => {
     setScanning(false)
