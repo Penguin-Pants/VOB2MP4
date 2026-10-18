@@ -15,6 +15,14 @@ export interface ExportFlowApi {
 }
 
 /**
+ * Wait for the settings save. The settings only pre-fill the next disc, so a
+ * failed save must not turn a finished export or an accepted job into an error.
+ */
+async function saveSettings(api: ExportFlowApi, patch: SettingsPatch): Promise<void> {
+  await api.updateSettings(patch).catch(() => undefined)
+}
+
+/**
  * Export now. Remember the settings (incl. the next start episode) only on
  * success: a refused or failed export must not skip episode numbers.
  */
@@ -24,7 +32,7 @@ export async function exportAndRemember(
   remember: SettingsPatch
 ): Promise<ExportResult> {
   const res = await api.runExport(req)
-  if (res.ok) void api.updateSettings(remember)
+  if (res.ok) await saveSettings(api, remember)
   return res
 }
 
@@ -41,7 +49,7 @@ export async function queueAndRemember(
   remember: SettingsPatch
 ): Promise<void> {
   await api.queueAdd(req)
-  void api.updateSettings({
+  await saveSettings(api, {
     ...remember,
     lastExport: { ...remember.lastExport, startEpisode: req.naming.startEpisode }
   })
