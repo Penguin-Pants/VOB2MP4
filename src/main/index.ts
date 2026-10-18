@@ -6,7 +6,7 @@ import { MEDIA_EXTENSIONS } from './input'
 import { extractFrame, generateFilmstrip } from './preview'
 import { runExport, waitForExports } from './export'
 import { addJob, clearFinished, listJobs, removeJob, runQueue, stopQueue } from './queue'
-import { getSettings, updateSettings } from './settings'
+import { getSettings, rememberCompletedExport, updateSettings } from './settings'
 import { openProject, saveProject } from './project'
 import { cancelScan, scanBlackFrames } from './scan'
 import type {
@@ -151,7 +151,13 @@ ipcMain.handle('queue:remove', (_e, id: string): QueueJobView[] => removeJob(id)
 ipcMain.handle('queue:clear', (): QueueJobView[] => clearFinished())
 ipcMain.handle('queue:list', (): QueueJobView[] => listJobs())
 ipcMain.handle('queue:run', (): QueueJobView[] => {
-  void runQueue()
+  // Save a job's episode numbers only once it finished: the queue lives in
+  // memory, so numbers of jobs that never ran must not be used up.
+  void runQueue(async (req, onProgress, signal) => {
+    const res = await runExport(req, onProgress, signal)
+    if (res.ok) rememberCompletedExport(req.naming, res.outputs.length)
+    return res
+  })
   return listJobs()
 })
 ipcMain.handle('queue:stop', (): QueueJobView[] => stopQueue())

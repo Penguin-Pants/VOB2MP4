@@ -10,6 +10,7 @@ import { InputView } from './InputView'
 import { Preview } from './Preview'
 import { QueueView } from './QueueView'
 import type { ExportInitial } from './ExportPanel'
+import { nextFreeEpisode } from './exportFlow'
 
 function initialFromSettings(le: LastExportSettings | undefined): ExportInitial | undefined {
   if (!le) return undefined
@@ -42,7 +43,11 @@ export default function App(): JSX.Element {
   async function loadSource(src: PreviewSource): Promise<void> {
     // Pre-fill export options from the most recently used settings.
     const settings = await window.api.getSettings().catch((): AppSettings => ({}))
-    setExportInitial(initialFromSettings(settings.lastExport))
+    const jobs = await window.api.queueList().catch((): QueueJobView[] => [])
+    const initial = initialFromSettings(settings.lastExport)
+    // Start after the episodes already queued for this show and season.
+    const startEpisode = nextFreeEpisode(settings.lastExport, jobs)
+    setExportInitial(initial && startEpisode != null ? { ...initial, startEpisode } : initial)
     setSplitPoints([])
     setLoadNonce((n) => n + 1)
     setSource(src)
