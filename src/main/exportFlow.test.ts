@@ -7,11 +7,12 @@ import type { AppSettings, ExportRequest, ExportResult, QueueJobView, SettingsPa
 const req = { naming: { showName: 'Show', season: 1, startEpisode: 4, outputDir: '/tv' } } as ExportRequest
 const remember: SettingsPatch = { lastExport: { startEpisode: 5 } }
 
-function fakeApi(result: ExportResult | Error) {
+function fakeApi(result: ExportResult | Error, settings: AppSettings = {}) {
   const saved: SettingsPatch[] = []
   return {
     saved,
     api: {
+      getSettings: async (): Promise<AppSettings> => settings,
       runExport: async (): Promise<ExportResult> => {
         if (result instanceof Error) throw result
         return result
@@ -54,6 +55,15 @@ test('queueAndRemember saves the job start, not the advanced start episode', asy
   assert.deepEqual(failed.saved, [])
 })
 
+
+test('queueAndRemember does not move the saved start of the same show past a queued job', async () => {
+  // E01-E04 then E05-E08 queued: removing both must give E01 back.
+  const saved = { mode: 'reencode', preset: 'balanced', outputDir: '/tv', showName: 'Show', season: 1, startEpisode: 1 } as const
+  const { api, saved: patches } = fakeApi({ ok: true, outputs: [] }, { lastExport: saved })
+  const second = { naming: { showName: 'Show', season: 1, startEpisode: 5, outputDir: '/tv' } } as ExportRequest
+  await queueAndRemember(api, second, { lastExport: { startEpisode: 9, showName: 'Show', season: 1 } })
+  assert.equal(patches[0].lastExport?.startEpisode, 1)
+})
 
 function job(id: string, startEpisode: number, episodeCount: number, extra: Partial<QueueJobView> = {}): QueueJobView {
   return {
@@ -101,6 +111,7 @@ test('exportAndRemember waits for the settings save before it resolves', async (
   const api = {
     runExport: async (): Promise<ExportResult> => ({ ok: true, outputs: ['/out/a.mp4'] }),
     queueAdd: async () => [],
+    getSettings: async (): Promise<AppSettings> => ({}),
     updateSettings: async () => {
       await new Promise((r) => setTimeout(r, 20))
       saved = true
@@ -115,6 +126,7 @@ test('a failed settings save does not turn a finished export into a failure', as
   const api = {
     runExport: async (): Promise<ExportResult> => ({ ok: true, outputs: ['/out/a.mp4'] }),
     queueAdd: async () => [],
+    getSettings: async (): Promise<AppSettings> => ({}),
     updateSettings: async () => {
       throw new Error('disk full')
     }

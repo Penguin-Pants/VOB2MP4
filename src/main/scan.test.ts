@@ -57,7 +57,7 @@ test(
         return file
       })
       // Deleting the list fails (e.g. a virus scanner holds it on Windows).
-      mock.method(fsp, 'rm', async () => {
+      const rmMock = mock.method(fsp, 'rm', async () => {
         throw new Error('EBUSY: resource busy or locked')
       })
       const res = await scanBlackFrames(
@@ -65,6 +65,7 @@ test(
         0.4,
         () => undefined
       )
+      assert.ok(rmMock.mock.calls.some((c) => String(c.arguments[0]).includes('vob2mp4-concat-')))
       assert.ok(Array.isArray(res))
     } finally {
       mock.restoreAll()
