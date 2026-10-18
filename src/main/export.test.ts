@@ -1,4 +1,5 @@
-import { test } from 'node:test'
+import { mock, test } from 'node:test'
+import { createRequire } from 'module'
 import assert from 'node:assert/strict'
 import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from 'fs/promises'
 import { execFileSync } from 'child_process'
@@ -295,6 +296,27 @@ test('runExport reuses an empty placeholder left by an interrupted run', async (
     assert.doesNotMatch(res.error ?? '', /already exists/)
     await assert.rejects(stat(stale), { code: 'ENOENT' })
   } finally {
+    await rm(dir, { recursive: true, force: true })
+  }
+})
+
+test('runExport keeps its result when the temp concat list cannot be deleted', needsFfmpeg, async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'vob2mp4-test-'))
+  const fsp = createRequire(__filename)('fs/promises') as typeof import('fs/promises')
+  try {
+    const files = [makeClip(dir, 'a.mkv', '160x120'), makeClip(dir, 'b.mkv', '160x120')]
+    const source: PreviewSource = { ...base, kind: 'files', durationSec: 4, files, fileDurations: [2, 2] }
+    const realRm = fsp.rm
+    // Only the concat list delete fails; other deletes (test cleanup) still work.
+    mock.method(fsp, 'rm', async (path: string, opts?: object) => {
+      if (String(path).includes('vob2mp4-concat-')) throw new Error('EBUSY: resource busy or locked')
+      return realRm(path, opts)
+    })
+    const res = await runExport(exportRequest(source, dir), () => undefined)
+    assert.equal(res.ok, true, res.error)
+    assert.equal(res.outputs.length, 1)
+  } finally {
+    mock.restoreAll()
     await rm(dir, { recursive: true, force: true })
   }
 })
