@@ -1,4 +1,5 @@
 import type {
+  AppSettings,
   ExportRequest,
   ExportResult,
   LastExportSettings,
@@ -9,6 +10,7 @@ import { nextStartEpisode } from '../../shared/naming'
 
 /** The part of window.api the export flows use (injectable for tests). */
 export interface ExportFlowApi {
+  getSettings: () => Promise<AppSettings>
   runExport: (req: ExportRequest) => Promise<ExportResult>
   queueAdd: (req: ExportRequest) => Promise<QueueJobView[]>
   updateSettings: (patch: SettingsPatch) => Promise<unknown>
@@ -42,11 +44,11 @@ export async function exportAndRemember(
 }
 
 /**
- * Add to the queue and remember the settings once the job is accepted, but
- * with the job's own start episode, not the advanced one: the queue lives
- * only in memory, so its numbers are saved when a job finishes (main
- * process) and the pre-fill for the next disc comes from the live queue
- * (nextFreeEpisode).
+ * Add to the queue and remember the settings once the job is accepted. The
+ * queue lives only in memory, so a queued job never moves the saved start
+ * forward: its numbers are saved when it finishes (main process) and the
+ * pre-fill for the next disc comes from the live queue (nextFreeEpisode).
+ * The saved start only moves back, or resets for another show or season.
  */
 export async function queueAndRemember(
   api: ExportFlowApi,
@@ -54,10 +56,10 @@ export async function queueAndRemember(
   remember: SettingsPatch
 ): Promise<void> {
   await api.queueAdd(req)
-  await saveSettings(api, {
-    ...remember,
-    lastExport: { ...remember.lastExport, startEpisode: req.naming.startEpisode }
-  })
+  const last = (await api.getSettings().catch((): AppSettings => ({}))).lastExport
+  const sameShow = last?.showName === req.naming.showName && last?.season === req.naming.season
+  const startEpisode = sameShow ? Math.min(last.startEpisode, req.naming.startEpisode) : req.naming.startEpisode
+  await saveSettings(api, { ...remember, lastExport: { ...remember.lastExport, startEpisode } })
 }
 
 /**

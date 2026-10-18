@@ -308,13 +308,36 @@ test('runExport keeps its result when the temp concat list cannot be deleted', n
     const source: PreviewSource = { ...base, kind: 'files', durationSec: 4, files, fileDurations: [2, 2] }
     const realRm = fsp.rm
     // Only the concat list delete fails; other deletes (test cleanup) still work.
-    mock.method(fsp, 'rm', async (path: string, opts?: object) => {
+    const rmMock = mock.method(fsp, 'rm', async (path: string, opts?: object) => {
       if (String(path).includes('vob2mp4-concat-')) throw new Error('EBUSY: resource busy or locked')
       return realRm(path, opts)
     })
     const res = await runExport(exportRequest(source, dir), () => undefined)
+    assert.ok(rmMock.mock.calls.some((c) => String(c.arguments[0]).includes('vob2mp4-concat-')))
     assert.equal(res.ok, true, res.error)
     assert.equal(res.outputs.length, 1)
+  } finally {
+    mock.restoreAll()
+    await rm(dir, { recursive: true, force: true })
+  }
+})
+
+test('runExport keeps a finished episode when Windows briefly locks the placeholder', needsFfmpeg, async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'vob2mp4-test-'))
+  const fsp = createRequire(__filename)('fs/promises') as typeof import('fs/promises')
+  try {
+    const source: PreviewSource = { ...base, kind: 'files', durationSec: 2, files: [makeClip(dir, 'a.mkv', '160x120')], fileDurations: [2] }
+    const realRename = fsp.rename
+    let locked = 2
+    // A scanner holds the empty placeholder open for the first two tries.
+    const renameMock = mock.method(fsp, 'rename', async (from: string, to: string) => {
+      if (locked-- > 0) throw Object.assign(new Error('EPERM: operation not permitted'), { code: 'EPERM' })
+      return realRename(from, to)
+    })
+    const res = await runExport(exportRequest(source, dir), () => undefined)
+    assert.equal(renameMock.mock.callCount(), 3)
+    assert.equal(res.ok, true, res.error)
+    assert.ok((await stat(res.outputs[0])).size > 0)
   } finally {
     mock.restoreAll()
     await rm(dir, { recursive: true, force: true })
