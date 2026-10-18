@@ -95,7 +95,12 @@ export function runFfmpeg(args: string[], onProgressSec?: (sec: number) => void)
     while ((nl = pending.indexOf('\n')) >= 0) {
       const t = parseOutTime(pending.slice(0, nl))
       pending = pending.slice(nl + 1)
-      if (t != null) onProgressSec(t)
+      if (t == null) continue
+      try {
+        onProgressSec(t)
+      } catch {
+        // A failing listener (e.g. a closed window) must not crash the main process.
+      }
     }
   })
   proc.stderr.on('data', (d: Buffer) => err.push(d))

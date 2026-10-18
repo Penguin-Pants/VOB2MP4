@@ -68,12 +68,13 @@ export function ExportPanel({
   const [burnSub, setBurnSub] = useState<number | null>(initial?.burnSub ?? null)
 
   const [exporting, setExporting] = useState(false)
+  const [queueing, setQueueing] = useState(false)
   const [progress, setProgress] = useState<ExportProgress | null>(null)
   const [result, setResult] = useState<ExportResult | null>(null)
   const [queuedMsg, setQueuedMsg] = useState<string | null>(null)
 
   const naming = { showName, season, startEpisode, outputDir: outputDir ?? '' }
-  const canExport = !exporting && showName.trim() !== '' && !!outputDir && segments.length > 0
+  const canExport = !exporting && !queueing && showName.trim() !== '' && !!outputDir && segments.length > 0
 
   function buildRequest(): ExportRequest | null {
     if (!outputDir) return null
@@ -125,8 +126,17 @@ export function ExportPanel({
   async function addToQueue(): Promise<void> {
     const req = buildRequest()
     if (!req) return
-    await queueAndRemember(window.api, req, settingsToRemember())
-    setQueuedMsg(`Added “${showName.trim()}” (${segments.length} ep) to the queue`)
+    setQueueing(true)
+    try {
+      await queueAndRemember(window.api, req, settingsToRemember())
+      // The next job from this panel continues after these episodes.
+      setStartEpisode(nextStartEpisode(startEpisode, segments.length))
+      setQueuedMsg(`Added “${showName.trim()}” (${segments.length} ep) to the queue`)
+    } catch (e) {
+      setQueuedMsg(`Could not add to the queue: ${e instanceof Error ? e.message : String(e)}`)
+    } finally {
+      setQueueing(false)
+    }
   }
 
   async function onSaveProject(): Promise<void> {
@@ -154,7 +164,10 @@ export function ExportPanel({
     setProgress(null)
     const unsub = window.api.onExportProgress(setProgress)
     try {
-      setResult(await exportAndRemember(window.api, req, settingsToRemember()))
+      const res = await exportAndRemember(window.api, req, settingsToRemember())
+      // A second export from this panel continues after these episodes.
+      if (res.ok) setStartEpisode(nextStartEpisode(startEpisode, segments.length))
+      setResult(res)
     } catch (e) {
       setResult({ ok: false, outputs: [], error: e instanceof Error ? e.message : String(e) })
     } finally {
