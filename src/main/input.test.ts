@@ -93,3 +93,11 @@ test('groupMediaFiles gives same-named files in different folders distinct ids',
   assert.equal(groups.length, 2)
   assert.notEqual(groups[0].id, groups[1].id)
 })
+
+test('groupVobFiles leaves out the disc menu VOB (VIDEO_TS.VOB)', () => {
+  const groups = groupVobFiles(['/d/VIDEO_TS.VOB', '/d/VTS_01_1.VOB', '/d/video_ts.vob'])
+  assert.deepEqual(
+    groups.map((g) => g.files),
+    [['/d/VTS_01_1.VOB']]
+  )
+})

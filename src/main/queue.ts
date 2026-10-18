@@ -135,7 +135,3 @@ export function stopQueue(): QueueJobView[] {
   }
   return views()
 }
-
-export function isRunning(): boolean {
-  return running
-}

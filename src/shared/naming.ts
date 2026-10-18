@@ -32,11 +32,6 @@ export function episodeFileName(naming: NamingOptions, episodeIndex: number): st
   return `${show} - S${pad2(naming.season)}E${pad2(epNum)}.mp4`
 }
 
-/** Path of the episode relative to the output dir: "Season 01/Show - S01E03.mp4". */
-export function episodeRelPath(naming: NamingOptions, episodeIndex: number): string {
-  return `${seasonFolderName(naming.season)}/${episodeFileName(naming, episodeIndex)}`
-}
-
 /** First episode number after exporting `episodeCount` from `startEpisode`. */
 export function nextStartEpisode(startEpisode: number, episodeCount: number): number {
   return startEpisode + episodeCount
