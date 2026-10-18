@@ -213,6 +213,8 @@ app.on('before-quit', (event) => {
   exportAbort?.abort()
   stopQueue()
   cancelScan()
+  // Before the kill: a killed preview capture must not start its fallback run.
+  cancelPreview()
   killAllFfmpeg()
   void waitForExports().finally(() => {
     readyToQuit = true
