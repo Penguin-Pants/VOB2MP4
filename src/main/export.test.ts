@@ -4,7 +4,7 @@ import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from 'fs/promises'
 import { execFileSync } from 'child_process'
 import { join } from 'path'
 import { tmpdir } from 'os'
-import { resolveInput, runExport } from './export'
+import { resolveInput, runExport, waitForExports } from './export'
 import { binariesPresent, binaryPath } from './ffmpeg'
 import type { ExportRequest, PreviewSource } from '../shared/types'
 
@@ -241,6 +241,35 @@ test('runExport removes its reserved files when it fails before encoding', async
     for (const ep of ['E01', 'E02']) {
       await assert.rejects(stat(join(dir, 'Season 01', `Show - S01${ep}.mp4`)), { code: 'ENOENT' })
     }
+  } finally {
+    await rm(dir, { recursive: true, force: true })
+  }
+})
+
+test('waitForExports resolves when no export runs', async () => {
+  await waitForExports()
+})
+
+test('waitForExports waits until a cancelled export removed its files', needsFfmpeg, async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'vob2mp4-test-'))
+  try {
+    const input = makeClip(dir, 'clip.mkv', '160x120')
+    const source: PreviewSource = {
+      ...base,
+      kind: 'files',
+      durationSec: 2,
+      files: [input],
+      fileDurations: [2]
+    }
+    const ctrl = new AbortController()
+    // Like app quit: abort, then wait without holding the export promise.
+    let finished = false
+    void runExport(exportRequest(source, dir), () => ctrl.abort(), ctrl.signal).then(() => {
+      finished = true
+    })
+    await waitForExports()
+    assert.equal(finished, true)
+    await assert.rejects(stat(join(dir, 'Season 01', 'Show - S01E01.mp4')), { code: 'ENOENT' })
   } finally {
     await rm(dir, { recursive: true, force: true })
   }

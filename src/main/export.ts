@@ -75,7 +75,25 @@ async function runOne(
  * modified. Returns the list of written files. Aborting `signal` stops the
  * running episode and skips the rest; unfinished episode files are removed.
  */
-export async function runExport(
+export function runExport(
+  req: ExportRequest,
+  onProgress: (p: ExportProgress) => void,
+  signal?: AbortSignal
+): Promise<ExportResult> {
+  const run = exportProgram(req, onProgress, signal)
+  activeExports.add(run)
+  void run.finally(() => activeExports.delete(run))
+  return run
+}
+
+const activeExports = new Set<Promise<ExportResult>>()
+
+/** Resolves once every running export has finished, including its file cleanup. */
+export async function waitForExports(): Promise<void> {
+  await Promise.allSettled([...activeExports])
+}
+
+async function exportProgram(
   req: ExportRequest,
   onProgress: (p: ExportProgress) => void,
   signal?: AbortSignal

@@ -4,7 +4,7 @@ import { ffmpegVersion, binariesPresent, killAllFfmpeg } from './ffmpeg'
 import { inspectPaths } from './inspect'
 import { MEDIA_EXTENSIONS } from './input'
 import { extractFrame, generateFilmstrip } from './preview'
-import { runExport } from './export'
+import { runExport, waitForExports } from './export'
 import { addJob, clearFinished, listJobs, removeJob, runQueue, stopQueue } from './queue'
 import { getSettings, updateSettings } from './settings'
 import { openProject, saveProject } from './project'
@@ -133,6 +133,8 @@ ipcMain.handle('dialog:chooseOutputDir', async (): Promise<string | null> => {
 // IPC: run an export, streaming progress back to the requesting window.
 let exportAbort: AbortController | null = null
 ipcMain.handle('export:run', async (e, req: ExportRequest): Promise<ExportResult> => {
+  // One direct export at a time, so Cancel always reaches the running one.
+  if (exportAbort) return { ok: false, outputs: [], error: 'An export is already running.' }
   const abort = new AbortController()
   exportAbort = abort
   try {
@@ -182,8 +184,20 @@ app.whenReady().then(() => {
   })
 })
 
-// Don't leave encodes running after the window is gone.
-app.on('before-quit', killAllFfmpeg)
+// On quit: stop all ffmpeg work, wait until the exports removed their
+// unfinished episode files, then quit for real.
+let readyToQuit = false
+app.on('before-quit', (event) => {
+  if (readyToQuit) return
+  event.preventDefault()
+  exportAbort?.abort()
+  stopQueue()
+  killAllFfmpeg()
+  void waitForExports().finally(() => {
+    readyToQuit = true
+    app.quit()
+  })
+})
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit()
