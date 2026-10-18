@@ -158,7 +158,8 @@ ipcMain.handle('queue:run', (): QueueJobView[] => {
   // memory, so numbers of jobs that never ran must not be used up.
   void runQueue(async (req, onProgress, signal) => {
     const res = await runExport(req, onProgress, signal)
-    if (res.ok) rememberCompletedExport(req.naming, res.outputs.length)
+    // Also after a partial failure: written episodes stay on disk.
+    if (res.outputs.length > 0) rememberCompletedExport(req.naming, res.outputs.length)
     return res
   })
   return listJobs()
@@ -211,6 +212,7 @@ app.on('before-quit', (event) => {
   event.preventDefault()
   exportAbort?.abort()
   stopQueue()
+  cancelScan()
   killAllFfmpeg()
   void waitForExports().finally(() => {
     readyToQuit = true

@@ -23,8 +23,8 @@ async function saveSettings(api: ExportFlowApi, patch: SettingsPatch): Promise<v
 }
 
 /**
- * Export now. Remember the settings (incl. the next start episode) only on
- * success: a refused or failed export must not skip episode numbers.
+ * Export now. Remember the settings, with the start episode moved past the
+ * episodes actually written: a refused export writes none and changes nothing.
  */
 export async function exportAndRemember(
   api: ExportFlowApi,
@@ -32,7 +32,12 @@ export async function exportAndRemember(
   remember: SettingsPatch
 ): Promise<ExportResult> {
   const res = await api.runExport(req)
-  if (res.ok) await saveSettings(api, remember)
+  // Also after a partial failure: the episodes already written stay on disk,
+  // so the next disc must start after them.
+  if (res.outputs.length > 0) {
+    const startEpisode = nextStartEpisode(req.naming.startEpisode, res.outputs.length)
+    await saveSettings(api, { ...remember, lastExport: { ...remember.lastExport, startEpisode } })
+  }
   return res
 }
 
@@ -68,9 +73,10 @@ export function nextFreeEpisode(
   if (!saved) return undefined
   let next = saved.startEpisode
   for (const job of jobs) {
-    if (job.status === 'error') continue
     if (job.showName !== saved.showName || job.season !== saved.season) continue
-    next = Math.max(next, nextStartEpisode(job.startEpisode, job.episodeCount))
+    // A failed job keeps only the episodes it wrote; others hold their range.
+    const count = job.status === 'error' ? job.outputs.length : job.episodeCount
+    if (count > 0) next = Math.max(next, nextStartEpisode(job.startEpisode, count))
   }
   return next
 }
