@@ -19,6 +19,7 @@ import type {
   PreviewSource,
   ProjectFile,
   QueueJobView,
+  ScanResult,
   SettingsPatch
 } from '../shared/types'
 
@@ -168,7 +169,7 @@ ipcMain.handle('project:save', (_e, project: ProjectFile) => saveProject(project
 ipcMain.handle('project:open', () => openProject())
 
 // IPC: scan for black frames (scene breaks); progress via 'scan:progress'.
-ipcMain.handle('scan:black', (e, source: PreviewSource, minBlackSec: number): Promise<number[]> =>
+ipcMain.handle('scan:black', (e, source: PreviewSource, minBlackSec: number): Promise<ScanResult> =>
   scanBlackFrames(source, minBlackSec, (fraction) => e.sender.send('scan:progress', fraction))
 )
 ipcMain.handle('scan:cancel', (): void => cancelScan())
