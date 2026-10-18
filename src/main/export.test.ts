@@ -89,3 +89,32 @@ test('runExport resolves with an error when the season folder cannot be created'
     await rm(dir, { recursive: true, force: true })
   }
 })
+
+test('runExport resolves with an error when the concat list cannot be written', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'vob2mp4-test-'))
+  const blocker = join(dir, 'not-a-dir')
+  // os.tmpdir() reads TMPDIR on POSIX and TEMP/TMP on Windows.
+  const vars = ['TMPDIR', 'TEMP', 'TMP'] as const
+  const saved = vars.map((v) => process.env[v])
+  try {
+    await writeFile(blocker, '')
+    for (const v of vars) process.env[v] = blocker
+    const source: PreviewSource = {
+      ...base,
+      kind: 'files',
+      durationSec: 10,
+      files: [join(dir, 'a.vob'), join(dir, 'b.vob')],
+      fileDurations: [5, 5]
+    }
+    const res = await runExport(exportRequest(source, dir), () => undefined)
+    assert.equal(res.ok, false)
+    assert.deepEqual(res.outputs, [])
+    assert.ok(res.error && res.error.length > 0)
+  } finally {
+    vars.forEach((v, i) => {
+      if (saved[i] === undefined) delete process.env[v]
+      else process.env[v] = saved[i]
+    })
+    await rm(dir, { recursive: true, force: true })
+  }
+})
