@@ -102,3 +102,34 @@ test('scanBlackFrames reports a cancelled scan', needsFfmpeg, async () => {
     assert.equal(res.cancelled, true)
   })
 })
+
+test('cancelScan stops a scan whose ffmpeg is already running', needsFfmpeg, async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'vob2mp4-test-'))
+  try {
+    // Long enough that ffmpeg reports progress well before it finishes.
+    const file = join(dir, 'long.mpg')
+    execFileSync(binaryPath('ffmpeg'), [
+      '-v', 'error', '-f', 'lavfi', '-i', 'testsrc=d=1200:s=320x240:r=25', '-c:v', 'mpeg2video', file
+    ])
+    let progressed = false
+    let atCancel = 0
+    let maxFraction = 0
+    const res = await scanBlackFrames(fileSource(file, 1200), 0.4, (fraction) => {
+      maxFraction = Math.max(maxFraction, fraction)
+      // First progress line: ffmpeg is decoding, so cancel kills a live process.
+      if (!progressed && fraction > 0) {
+        progressed = true
+        atCancel = fraction
+        cancelScan()
+      }
+    })
+    assert.equal(progressed, true)
+    // A killed ffmpeg stops reporting; one that kept running would reach ~1.
+    assert.ok(maxFraction - atCancel < 0.2, `scan kept running from ${atCancel} to ${maxFraction}`)
+    assert.equal(res.ok, true)
+    if (!res.ok) return
+    assert.equal(res.cancelled, true)
+  } finally {
+    await rm(dir, { recursive: true, force: true })
+  }
+})
