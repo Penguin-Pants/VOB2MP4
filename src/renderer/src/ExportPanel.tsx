@@ -165,8 +165,8 @@ export function ExportPanel({
     const unsub = window.api.onExportProgress(setProgress)
     try {
       const res = await exportAndRemember(window.api, req, settingsToRemember())
-      // A second export from this panel continues after these episodes.
-      if (res.ok) setStartEpisode(nextStartEpisode(startEpisode, segments.length))
+      // A second export from this panel continues after the episodes written.
+      if (res.outputs.length > 0) setStartEpisode(nextStartEpisode(startEpisode, res.outputs.length))
       setResult(res)
     } catch (e) {
       setResult({ ok: false, outputs: [], error: e instanceof Error ? e.message : String(e) })

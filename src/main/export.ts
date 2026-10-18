@@ -1,4 +1,4 @@
-import { mkdir, rm, stat, writeFile } from 'fs/promises'
+import { mkdir, rename, rm, stat, writeFile } from 'fs/promises'
 import { join, dirname } from 'path'
 import { tmpdir } from 'os'
 import { runFfmpeg } from './ffmpeg'
@@ -65,16 +65,25 @@ export function reservationKey(path: string, platform: NodeJS.Platform = process
  * interrupted run (crash or kill), never a real episode, so it is reused.
  */
 async function reserve(output: string): Promise<void> {
+  // Claim the key before any await, so two exports in this process can never
+  // both pass the checks below for the same file.
+  const key = reservationKey(output)
+  if (liveReservations.has(key)) throw Object.assign(new Error('reserved'), { code: 'EEXIST' })
+  liveReservations.add(key)
   try {
     await writeFile(output, '', { flag: 'wx' })
   } catch (e) {
-    const stale =
-      (e as NodeJS.ErrnoException).code === 'EEXIST' &&
-      !liveReservations.has(reservationKey(output)) &&
-      (await stat(output)).size === 0
-    if (!stale) throw e
+    const stale = (e as NodeJS.ErrnoException).code === 'EEXIST' && (await stat(output).catch(() => null))?.size === 0
+    if (!stale) {
+      liveReservations.delete(key)
+      throw e
+    }
   }
-  liveReservations.add(reservationKey(output))
+}
+
+/** Where ffmpeg writes an episode until it is complete (see runExport). */
+function partPath(output: string): string {
+  return `${output}.part`
 }
 
 async function runOne(
@@ -167,12 +176,15 @@ async function exportProgram(
       const seg = segments[i]
       const name = names[i]
       const output = reserved[i]
+      // Encode to a .part file and rename it when done: a crash or power loss
+      // then leaves only the empty placeholder (reclaimed next time) and a
+      // .part file, never a truncated episode under its real name.
       const args = buildExportArgs({
         inputArgs,
         input,
         startSec: seg.startSec,
         endSec: seg.endSec,
-        output,
+        output: partPath(output),
         options
       })
       onProgress({
@@ -206,6 +218,7 @@ async function exportProgram(
         if (signal?.aborted) return { ok: false, outputs, error: CANCELLED }
         return { ok: false, outputs, error: `Episode ${i + 1} (${name}) failed: ${error}` }
       }
+      await rename(partPath(output), output)
       outputs.push(output)
       onProgress({
         episodeIndex: i,
@@ -222,6 +235,7 @@ async function exportProgram(
     // cancel or an early error), so no empty or truncated file is left for
     // a media server to index or to block the next export.
     for (const path of reserved) {
+      await rm(partPath(path), { force: true }).catch(() => undefined)
       if (!outputs.includes(path)) await rm(path, { force: true }).catch(() => undefined)
       liveReservations.delete(reservationKey(path))
     }

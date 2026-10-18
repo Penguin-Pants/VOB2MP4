@@ -1,7 +1,7 @@
 import { mock, test } from 'node:test'
 import { createRequire } from 'module'
 import assert from 'node:assert/strict'
-import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from 'fs/promises'
+import { mkdir, mkdtemp, readdir, readFile, rm, stat, writeFile } from 'fs/promises'
 import { execFileSync } from 'child_process'
 import { join } from 'path'
 import { tmpdir } from 'os'
@@ -327,4 +327,53 @@ test('reservationKey matches case-variant paths on Windows only', () => {
     reservationKey('c:\\tv\\season 01\\show - s01e01.mp4', 'win32')
   )
   assert.notEqual(reservationKey('/tv/Show.mp4', 'linux'), reservationKey('/tv/show.mp4', 'linux'))
+})
+
+test('two exports cannot both reclaim the same stale placeholder', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'vob2mp4-test-'))
+  try {
+    await mkdir(join(dir, 'Season 01'))
+    await writeFile(join(dir, 'Season 01', 'Show - S01E01.mp4'), '')
+    const source: PreviewSource = {
+      ...base,
+      kind: 'files',
+      durationSec: 10,
+      files: [join(dir, 'missing.vob')],
+      fileDurations: [10]
+    }
+    const [a, b] = await Promise.all([
+      runExport(exportRequest(source, dir), () => undefined),
+      runExport(exportRequest(source, dir), () => undefined)
+    ])
+    const refused = [a, b].filter((r) => /already exists/.test(r.error ?? ''))
+    assert.equal(refused.length, 1)
+  } finally {
+    await rm(dir, { recursive: true, force: true })
+  }
+})
+
+test('runExport encodes to a .part file and publishes it only when done', needsFfmpeg, async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'vob2mp4-test-'))
+  try {
+    const input = makeClip(dir, 'clip.mkv', '160x120')
+    const source: PreviewSource = { ...base, kind: 'files', durationSec: 2, files: [input], fileDurations: [2] }
+    const res = await runExport(exportRequest(source, dir), () => undefined)
+    assert.equal(res.ok, true, res.error)
+    assert.deepEqual(await readdir(join(dir, 'Season 01')), ['Show - S01E01.mp4'])
+  } finally {
+    await rm(dir, { recursive: true, force: true })
+  }
+})
+
+test('a failed episode leaves no .part file behind', needsFfmpeg, async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'vob2mp4-test-'))
+  try {
+    const input = makeClip(dir, 'odd.mkv', '160x121')
+    const source: PreviewSource = { ...base, kind: 'files', durationSec: 2, files: [input], fileDurations: [2] }
+    const res = await runExport(exportRequest(source, dir), () => undefined)
+    assert.equal(res.ok, false)
+    assert.deepEqual(await readdir(join(dir, 'Season 01')), [])
+  } finally {
+    await rm(dir, { recursive: true, force: true })
+  }
 })
