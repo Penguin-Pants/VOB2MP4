@@ -274,3 +274,27 @@ test('waitForExports waits until a cancelled export removed its files', needsFfm
     await rm(dir, { recursive: true, force: true })
   }
 })
+
+test('runExport reuses an empty placeholder left by an interrupted run', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'vob2mp4-test-'))
+  try {
+    // A crash or kill can leave the zero-byte reservation behind.
+    await mkdir(join(dir, 'Season 01'))
+    const stale = join(dir, 'Season 01', 'Show - S01E01.mp4')
+    await writeFile(stale, '')
+    const source: PreviewSource = {
+      ...base,
+      kind: 'files',
+      durationSec: 10,
+      files: [join(dir, 'missing.vob')],
+      fileDurations: [10]
+    }
+    const res = await runExport(exportRequest(source, dir), () => undefined)
+    // It gets past the reservation (then fails on the missing input).
+    assert.equal(res.ok, false)
+    assert.doesNotMatch(res.error ?? '', /already exists/)
+    await assert.rejects(stat(stale), { code: 'ENOENT' })
+  } finally {
+    await rm(dir, { recursive: true, force: true })
+  }
+})
