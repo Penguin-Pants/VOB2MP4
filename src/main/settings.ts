@@ -12,11 +12,16 @@ import type {
 
 /** Merge a settings patch, deep-merging `lastExport` and `lastDirs`. Pure. */
 export function mergeSettings(current: AppSettings, patch: SettingsPatch): AppSettings {
+  const prev = current.lastExport
+  const lastExport = patch.lastExport ? ({ ...prev, ...patch.lastExport } as LastExportSettings) : prev
+  // For the same show and season the saved start only moves forward, so a
+  // stale patch (read before a queue job finished) cannot undo its progress.
+  if (prev && lastExport && lastExport !== prev && prev.showName === lastExport.showName && prev.season === lastExport.season) {
+    lastExport.startEpisode = Math.max(prev.startEpisode, lastExport.startEpisode)
+  }
   return {
     ...current,
-    lastExport: patch.lastExport
-      ? ({ ...current.lastExport, ...patch.lastExport } as LastExportSettings)
-      : current.lastExport,
+    lastExport,
     lastDirs: patch.lastDirs ? { ...current.lastDirs, ...patch.lastDirs } : current.lastDirs
   }
 }

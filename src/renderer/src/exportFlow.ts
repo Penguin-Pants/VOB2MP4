@@ -37,10 +37,8 @@ export async function exportAndRemember(
   // Also after a partial failure: the episodes already written stay on disk,
   // so the next disc must start after them.
   if (res.outputs.length > 0) {
-    const next = nextStartEpisode(req.naming.startEpisode, res.outputs.length)
-    const saved = await savedStartFor(api, req)
-    // Redoing an earlier episode must not move the saved start back.
-    const startEpisode = saved != null ? Math.max(saved, next) : next
+    // The main process keeps the saved start from moving back (mergeSettings).
+    const startEpisode = nextStartEpisode(req.naming.startEpisode, res.outputs.length)
     await saveSettings(api, { ...remember, lastExport: { ...remember.lastExport, startEpisode } })
   }
   return res

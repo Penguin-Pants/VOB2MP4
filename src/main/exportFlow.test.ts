@@ -65,14 +65,10 @@ test('queueAndRemember does not move the saved start of the same show past a que
   assert.equal(patches[0].lastExport?.startEpisode, 1)
 })
 
-test('the saved start never moves back for the same show', async () => {
-  // E01-E19 are done (saved start E20); redoing E03 or queueing E01 keeps E20.
+test('queueAndRemember keeps a later saved start for the same show', async () => {
+  // E01-E19 are done (saved start E20); queueing E01 keeps E20.
   const saved = { mode: 'reencode', preset: 'balanced', outputDir: '/tv', showName: 'Show', season: 1, startEpisode: 20 } as const
   const redo = { naming: { showName: 'Show', season: 1, startEpisode: 3, outputDir: '/tv' } } as ExportRequest
-  const exported = fakeApi({ ok: true, outputs: ['/tv/e03.mp4'] }, { lastExport: saved })
-  await exportAndRemember(exported.api, redo, { lastExport: { showName: 'Show', season: 1, startEpisode: 4 } })
-  assert.equal(exported.saved[0].lastExport?.startEpisode, 20)
-
   const queued = fakeApi({ ok: true, outputs: [] }, { lastExport: saved })
   await queueAndRemember(queued.api, { ...redo, naming: { ...redo.naming, startEpisode: 1 } }, { lastExport: { showName: 'Show', season: 1 } })
   assert.equal(queued.saved[0].lastExport?.startEpisode, 20)
