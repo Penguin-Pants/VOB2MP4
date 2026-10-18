@@ -3,7 +3,8 @@ import assert from 'node:assert/strict'
 import { exportAndRemember, nextFreeEpisode, queueAndRemember } from '../renderer/src/exportFlow'
 import type { AppSettings, ExportRequest, ExportResult, QueueJobView, SettingsPatch } from '../shared/types'
 
-const req = {} as ExportRequest
+// One episode from E04, so the next start is E05.
+const req = { naming: { showName: 'Show', season: 1, startEpisode: 4, outputDir: '/tv' } } as ExportRequest
 const remember: SettingsPatch = { lastExport: { startEpisode: 5 } }
 
 function fakeApi(result: ExportResult | Error) {
@@ -81,7 +82,7 @@ test('nextFreeEpisode follows the live queue, so removal order does not matter',
   assert.equal(nextFreeEpisode(saved, []), 1)
 })
 
-test('nextFreeEpisode ignores other shows, other seasons and failed jobs', () => {
+test('nextFreeEpisode ignores other shows, other seasons and failed jobs that wrote nothing', () => {
   const jobs = [
     job('x', 1, 10, { showName: 'Other' }),
     job('y', 1, 10, { season: 2 }),
@@ -120,4 +121,16 @@ test('a failed settings save does not turn a finished export into a failure', as
   }
   const res = await exportAndRemember(api, req, remember)
   assert.equal(res.ok, true)
+})
+
+test('exportAndRemember moves past the episodes a failed export already wrote', async () => {
+  const { api, saved } = fakeApi({ ok: false, outputs: ['/tv/S01E01.mp4', '/tv/S01E02.mp4'], error: 'Episode 3 failed' })
+  const partial = { naming: { showName: 'Show', season: 1, startEpisode: 1, outputDir: '/tv' } } as ExportRequest
+  await exportAndRemember(api, partial, { lastExport: { showName: 'Show', startEpisode: 5 } })
+  assert.deepEqual(saved, [{ lastExport: { showName: 'Show', startEpisode: 3 } }])
+})
+
+test('nextFreeEpisode counts only the written episodes of a failed job', () => {
+  const failed = job('f', 1, 4, { status: 'error', outputs: ['/tv/S01E01.mp4'] })
+  assert.equal(nextFreeEpisode(saved, [failed]), 2)
 })

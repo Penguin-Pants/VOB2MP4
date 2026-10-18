@@ -69,3 +69,17 @@ test('preset selects the right CRF', () => {
   assert.ok(argsFor({ ...base, preset: 'high' }).join(' ').includes('-crf 18'))
   assert.ok(argsFor({ ...base, preset: 'smaller' }).join(' ').includes('-crf 24'))
 })
+
+test('buildExportArgs names the mp4 format, so a .part output path works', () => {
+  const args = buildExportArgs({
+    inputArgs: [],
+    input: 'in.mkv',
+    startSec: 0,
+    endSec: 10,
+    output: 'Show - S01E01.mp4.part',
+    options: { mode: 'copy', preset: 'balanced', deinterlace: false, audioStreamIndices: [], burnSubtitleOrdinal: null }
+  })
+  const f = args.lastIndexOf('-f')
+  assert.equal(args[f + 1], 'mp4')
+  assert.equal(args[args.length - 1], 'Show - S01E01.mp4.part')
+})
