@@ -37,6 +37,8 @@ export function buildExportArgs(p: BuildExportArgsParams): string[] {
   const { inputArgs, input, startSec, endSec, output, options } = p
   const duration = Math.max(0, endSec - startSec)
 
+  // -y: the caller reserves `output` as an empty placeholder first, so this
+  // only ever replaces that placeholder.
   const args = ['-hide_banner', '-v', 'error', '-y', '-progress', 'pipe:1', '-nostats']
   args.push('-ss', startSec.toFixed(3))
   args.push(...inputArgs, '-i', input)

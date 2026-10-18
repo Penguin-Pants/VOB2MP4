@@ -10,7 +10,7 @@ import type {
   QualityPreset
 } from '../../shared/types'
 import { segmentsFromSplits } from '../../shared/segments'
-import { episodeFileName, seasonFolderName } from '../../shared/naming'
+import { episodeFileName, nextStartEpisode, seasonFolderName } from '../../shared/naming'
 
 /** Initial export config (from remembered settings or a loaded project). */
 export interface ExportInitial {
@@ -97,7 +97,9 @@ export function ExportPanel({
         outputDir: outputDir ?? '',
         showName: showName.trim(),
         season,
-        startEpisode
+        // Pre-fill the next disc with the following episode number, so it
+        // doesn't clash with the episodes of this one.
+        startEpisode: nextStartEpisode(startEpisode, segments.length)
       }
     })
   }

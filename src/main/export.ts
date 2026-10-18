@@ -1,5 +1,5 @@
 import { spawn } from 'child_process'
-import { mkdir, writeFile, rm } from 'fs/promises'
+import { access, mkdir, writeFile, rm } from 'fs/promises'
 import { join, dirname } from 'path'
 import { tmpdir } from 'os'
 import { binaryPath } from './ffmpeg'
@@ -37,6 +37,15 @@ export async function resolveInput(
     inputArgs: ['-f', 'concat', '-safe', '0'],
     input: listPath,
     cleanup: async () => rm(listPath, { force: true })
+  }
+}
+
+async function exists(path: string): Promise<boolean> {
+  try {
+    await access(path)
+    return true
+  } catch {
+    return false
   }
 }
 
@@ -99,10 +108,26 @@ export async function runExport(
     cleanup = resolved.cleanup
     const { inputArgs, input } = resolved
     await mkdir(seasonDir, { recursive: true })
+    // Never overwrite earlier work (e.g. the previous disc of the season).
+    // Check every episode first so nothing is encoded when one clashes.
+    const names = segments.map((_, i) => episodeFileName(naming, i))
+    for (const name of names) {
+      if (await exists(join(seasonDir, name))) {
+        return {
+          ok: false,
+          outputs,
+          error: `${name} already exists in ${seasonDir}. Change the start episode or move the file.`
+        }
+      }
+    }
     for (let i = 0; i < segments.length; i++) {
       const seg = segments[i]
-      const name = episodeFileName(naming, i)
+      const name = names[i]
       const output = join(seasonDir, name)
+      // Reserve the file atomically ('wx' fails if it exists). ffmpeg's -y
+      // then only overwrites this placeholder, so a failed episode can be
+      // deleted without touching anyone else's file.
+      await writeFile(output, '', { flag: 'wx' })
       const args = buildExportArgs({
         inputArgs,
         input,
@@ -130,6 +155,8 @@ export async function runExport(
         )
       } catch (e) {
         const error = e instanceof Error ? e.message : String(e)
+        // Don't leave a truncated episode for a media server to index.
+        await rm(output, { force: true })
         onProgress({
           episodeIndex: i,
           totalEpisodes: segments.length,
