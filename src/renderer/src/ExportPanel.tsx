@@ -123,8 +123,9 @@ export function ExportPanel({
   async function addToQueue(): Promise<void> {
     const req = buildRequest()
     if (!req) return
-    persistSettings()
     await window.api.queueAdd(req)
+    // Only after the job is accepted: the saved start episode moves past it.
+    persistSettings()
     setQueuedMsg(`Added “${showName.trim()}” (${segments.length} ep) to the queue`)
   }
 
@@ -151,10 +152,13 @@ export function ExportPanel({
     setExporting(true)
     setResult(null)
     setProgress(null)
-    persistSettings()
     const unsub = window.api.onExportProgress(setProgress)
     try {
-      setResult(await window.api.runExport(req))
+      const res = await window.api.runExport(req)
+      // Only after success: a refused or failed export must not move the
+      // saved start episode past episodes that were never written.
+      if (res.ok) persistSettings()
+      setResult(res)
     } catch (e) {
       setResult({ ok: false, outputs: [], error: e instanceof Error ? e.message : String(e) })
     } finally {

@@ -109,8 +109,9 @@ test('runExport refuses to overwrite an existing episode file', async () => {
     const res = await runExport(req, () => undefined)
     assert.equal(res.ok, false)
     assert.match(res.error ?? '', /S01E02/)
-    // Nothing was encoded and the earlier file is untouched.
+    // Nothing was encoded, no placeholder is left and the earlier file is untouched.
     assert.deepEqual(res.outputs, [])
+    await assert.rejects(stat(join(dir, 'Season 01', 'Show - S01E01.mp4')), { code: 'ENOENT' })
     assert.equal(await readFile(existing, 'utf8'), 'earlier disc')
   } finally {
     await rm(dir, { recursive: true, force: true })
@@ -170,6 +171,29 @@ test('runExport resolves with an error when the concat list cannot be written', 
       if (saved[i] === undefined) delete process.env[v]
       else process.env[v] = saved[i]
     })
+    await rm(dir, { recursive: true, force: true })
+  }
+})
+
+test('runExport removes its reserved files when it fails before encoding', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'vob2mp4-test-'))
+  try {
+    const source: PreviewSource = {
+      ...base,
+      kind: 'files',
+      durationSec: 100,
+      files: [join(dir, 'in.vob')],
+      fileDurations: [100]
+    }
+    const req = { ...exportRequest(source, dir), splitPoints: [50] }
+    const res = await runExport(req, () => {
+      throw new Error('progress listener broke')
+    })
+    assert.equal(res.ok, false)
+    for (const ep of ['E01', 'E02']) {
+      await assert.rejects(stat(join(dir, 'Season 01', `Show - S01${ep}.mp4`)), { code: 'ENOENT' })
+    }
+  } finally {
     await rm(dir, { recursive: true, force: true })
   }
 })
