@@ -1,5 +1,4 @@
 import type { QueueJobView } from '../../shared/types'
-import { removeQueuedJob } from './exportFlow'
 
 const STATUS_LABEL: Record<QueueJobView['status'], string> = {
   queued: 'Queued',
@@ -59,7 +58,7 @@ export function QueueView({
                 {j.status === 'queued' && (
                   <button
                     className="ghost queue__rm"
-                    onClick={() => void removeQueuedJob(window.api, j)}
+                    onClick={() => void window.api.queueRemove(j.id)}
                   >
                     ✕
                   </button>

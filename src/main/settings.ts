@@ -1,7 +1,14 @@
 import { app } from 'electron'
 import { join } from 'path'
 import { readFileSync, writeFileSync } from 'fs'
-import type { AppSettings, DialogFolder, LastExportSettings, SettingsPatch } from '../shared/types'
+import { nextStartEpisode } from '../shared/naming'
+import type {
+  AppSettings,
+  DialogFolder,
+  LastExportSettings,
+  NamingOptions,
+  SettingsPatch
+} from '../shared/types'
 
 /** Merge a settings patch, deep-merging `lastExport` and `lastDirs`. Pure. */
 export function mergeSettings(current: AppSettings, patch: SettingsPatch): AppSettings {
@@ -44,4 +51,25 @@ export function lastDir(kind: DialogFolder): string | undefined {
 /** Remember the folder a file dialog used, for the next dialog of that kind. */
 export function rememberDir(kind: DialogFolder, dir: string): void {
   updateSettings({ lastDirs: { [kind]: dir } })
+}
+
+/**
+ * The settings patch after a job finished: move the saved start episode past
+ * its episodes (same show and season only, never backwards). Pure.
+ */
+export function afterCompletedExport(
+  current: AppSettings,
+  naming: NamingOptions,
+  episodeCount: number
+): SettingsPatch {
+  const last = current.lastExport
+  if (!last || last.showName !== naming.showName || last.season !== naming.season) return {}
+  const next = nextStartEpisode(naming.startEpisode, episodeCount)
+  return next > last.startEpisode ? { lastExport: { startEpisode: next } } : {}
+}
+
+/** Save the numbers a finished queue job used (see afterCompletedExport). */
+export function rememberCompletedExport(naming: NamingOptions, episodeCount: number): void {
+  const patch = afterCompletedExport(getSettings(), naming, episodeCount)
+  if (patch.lastExport) updateSettings(patch)
 }
