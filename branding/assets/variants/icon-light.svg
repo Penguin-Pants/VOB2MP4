@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-label="Claw Cut symbol">
+<rect width="256" height="256" rx="42" fill="#F3F3F3"/>
+<!-- Upper film section: fixed geometric contour -->
+<path fill="#35383C" d="M42 67 172 34 189 94 62 128Z"/>
+<path fill="#F3F3F3" d="m57 76 19-5 5 19-19 5Zm29-7 19-5 5 19-19 5Zm29-8 19-5 5 19-19 5Zm29-7 19-5 5 19-19 5Z"/>
+<!-- Lower film section separated at cut -->
+<path fill="#35383C" d="m74 148 126-38 20 76-123 35Z"/>
+<path fill="#F3F3F3" d="m96 181 19-6 5 19-19 5Zm29-9 19-6 5 19-19 6Zm29-8 19-6 5 19-19 6Zm29-9 19-6 5 19-19 6Z"/>
+<!-- Blade has hard-edged point, no glow, no embedded raster -->
+<path fill="#E10606" d="M27 223 204 31 174 104 144 111 62 205Z"/>
+<path fill="#FFFFFF" d="M33 217 185 54 159 110Z" opacity=".84"/>
+<path fill="#E10606" d="m204 118 26 4-19 20Z"/>
+</svg>

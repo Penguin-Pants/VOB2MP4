@@ -1,0 +1,28 @@
+# Exact asset inventory
+
+- `design.md`
+- `brand-guidelines.md`
+- `README.md`
+- `mockups/queue.png`
+- `mockups/export.png`
+- `mockups/timeline.png`
+- `mockups/brand-family.png`
+- `mockups/import.png`
+- `implementation/claude-code-implementation-prompt.md`
+- `theme/tokens.css`
+- `theme/tokens.json`
+- `assets/exported/icon-32.png`
+- `assets/exported/icon.ico`
+- `assets/exported/icon-64.png`
+- `assets/exported/icon-512.png`
+- `assets/exported/icon-48.png`
+- `assets/exported/icon-128.png`
+- `assets/exported/icon-16.png`
+- `assets/exported/icon-256.png`
+- `assets/variants/icon-small.svg`
+- `assets/variants/icon-light.svg`
+- `assets/variants/icon-monochrome.svg`
+- `assets/variants/icon-dark.svg`
+- `assets/source/icon-master.svg`
+- `assets/source/icon-small.svg`
+- `assets/source/wordmark-master.svg`
