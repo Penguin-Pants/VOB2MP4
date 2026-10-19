@@ -19,6 +19,7 @@ const ENGINE_MISSING =
   'The video engine of VOB2MP4 is missing. Download the portable app again and use the new copy.'
 const DAMAGED =
   'The video data could not be read. The source may be damaged or incomplete at this point. Check it in a video player, or rip the disc again.'
+export const NO_PICTURE = 'There is no picture at this time. Move the playhead a little earlier.'
 export const UNEXPECTED = 'An unexpected problem occurred. Try again. If it happens again, restart VOB2MP4.'
 
 const BY_CODE: Record<string, string> = {

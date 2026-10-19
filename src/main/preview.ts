@@ -1,7 +1,7 @@
 import { runFfmpeg, type FfmpegRun } from './ffmpeg'
 import { dvdInput } from './export'
 import type { FilmstripThumb, FrameResult, PreviewSource } from '../shared/types'
-import { UserError, plainReason, videoReason } from '../shared/userError'
+import { NO_PICTURE, UserError, plainReason, videoReason } from '../shared/userError'
 
 const PREVIEW_HEIGHT = 480
 const THUMB_HEIGHT = 120
@@ -53,7 +53,10 @@ class LatestOnly {
       const { code, stdout, stderr } = await run.done
       if (!current()) throw new Error(SUPERSEDED)
       if (code === 0 && stdout.length > 0) return stdout
-      throw new UserError(videoReason(stderr))
+      // The input opened but gave no picture: the time is past the last frame
+      // (end of a title). A damaged input fails earlier, when it opens.
+      const noPicture = code === 0 || /Nothing was written into output file/.test(stderr)
+      throw new UserError(noPicture ? NO_PICTURE : videoReason(stderr))
     } finally {
       if (this.run === run) this.run = null
     }
