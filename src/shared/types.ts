@@ -175,13 +175,18 @@ export interface LastExportSettings {
   startEpisode: number
 }
 
+/** File dialogs whose last folder is remembered (Electron 43+ opens Downloads otherwise). */
+export type DialogFolder = 'input' | 'output' | 'project'
+
 export interface AppSettings {
   lastExport?: LastExportSettings
+  lastDirs?: Partial<Record<DialogFolder, string>>
 }
 
-/** A patch for settings; `lastExport` may be partial and is deep-merged. */
+/** A patch for settings; `lastExport` and `lastDirs` may be partial and are deep-merged. */
 export interface SettingsPatch {
   lastExport?: Partial<LastExportSettings>
+  lastDirs?: Partial<Record<DialogFolder, string>>
 }
 
 export type QueueStatus = 'queued' | 'running' | 'done' | 'error'

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import type { FilmstripThumb, PreviewSource, ScanResult } from '../../shared/types'
+import type { FilmstripThumb, PreviewSource, QueueJobView, ScanResult } from '../../shared/types'
 import { clampSplitMove, normalizeSplitPoints, segmentsFromSplits } from '../../shared/segments'
 import { formatDuration, parseTimecode } from './format'
 import { TimelineTrack } from './TimelineTrack'
@@ -15,7 +15,8 @@ export function Preview({
   splitPoints,
   onSplitPointsChange,
   exportInitial,
-  exportKey
+  exportKey,
+  queue
 }: {
   hidden?: boolean
   source: PreviewSource
@@ -24,6 +25,7 @@ export function Preview({
   onSplitPointsChange: (points: number[]) => void
   exportInitial?: ExportInitial
   exportKey: string
+  queue: QueueJobView[]
 }): JSX.Element {
   const [timeSec, setTimeSec] = useState(0)
   const [frameUrl, setFrameUrl] = useState<string | null>(null)
@@ -363,7 +365,7 @@ export function Preview({
         </div>
       </div>
 
-      <ExportPanel key={exportKey} source={source} splitPoints={splitPoints} initial={exportInitial} />
+      <ExportPanel key={exportKey} source={source} splitPoints={splitPoints} initial={exportInitial} queue={queue} />
     </div>
   )
 }

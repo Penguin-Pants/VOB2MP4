@@ -62,11 +62,15 @@ async function savedStartFor(api: ExportFlowApi, req: ExportRequest): Promise<nu
 export async function queueAndRemember(
   api: ExportFlowApi,
   req: ExportRequest,
-  remember: SettingsPatch
-): Promise<void> {
-  await api.queueAdd(req)
+  remember: SettingsPatch,
+  onQueued?: (jobs: QueueJobView[]) => void
+): Promise<QueueJobView[]> {
+  const jobs = await api.queueAdd(req)
+  // Report the job at once, so a removal during the settings save is seen.
+  onQueued?.(jobs)
   const startEpisode = (await savedStartFor(api, req)) ?? req.naming.startEpisode
   await saveSettings(api, { ...remember, lastExport: { ...remember.lastExport, startEpisode } })
+  return jobs
 }
 
 /**
@@ -88,4 +92,41 @@ export function nextFreeEpisode(
     if (count > 0) next = Math.max(next, nextStartEpisode(job.startEpisode, count))
   }
   return next
+}
+
+/** A start-episode change the export panel made itself when it queued a job. */
+export interface QueuedStep {
+  jobId: string
+  before: number
+  after: number
+}
+
+/**
+ * Step the panel's start episode back when the jobs it queued end without
+ * writing all their episodes, latest job first: to the first unwritten
+ * episode, or to the start before queueing if the job wrote nothing (for
+ * example, it was removed). Stops (and forgets the steps) once the user typed
+ * another number or a job wrote episodes, since those numbers are then
+ * deliberate or used.
+ */
+export function reconcileQueuedStart(
+  start: number,
+  steps: QueuedStep[],
+  prevJobs: QueueJobView[],
+  jobs: QueueJobView[]
+): { start: number; steps: QueuedStep[] } {
+  const left = [...steps]
+  while (left.length > 0) {
+    const top = left[left.length - 1]
+    const live = jobs.find((j) => j.id === top.jobId)
+    if (live && (live.status === 'queued' || live.status === 'running')) break
+    // A removed job is judged by how it looked last.
+    const job = live ?? prevJobs.find((j) => j.id === top.jobId)
+    if (job?.status === 'done' || start !== top.after) return { start, steps: [] }
+    const written = job?.outputs.length ?? 0
+    start = nextStartEpisode(top.before, written)
+    if (written > 0) return { start, steps: [] }
+    left.pop()
+  }
+  return { start, steps: left }
 }

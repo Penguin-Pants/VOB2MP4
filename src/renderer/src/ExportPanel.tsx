@@ -8,10 +8,11 @@ import type {
   PreviewSource,
   ProjectFile,
   QualityPreset,
+  QueueJobView,
   SettingsPatch
 } from '../../shared/types'
 import { segmentsFromSplits } from '../../shared/segments'
-import { exportAndRemember, queueAndRemember } from './exportFlow'
+import { exportAndRemember, queueAndRemember, reconcileQueuedStart, type QueuedStep } from './exportFlow'
 import { episodeFileName, nextStartEpisode, seasonFolderName } from '../../shared/naming'
 
 /** Initial export config (from remembered settings or a loaded project). */
@@ -38,11 +39,13 @@ function subLabel(s: MediaStreamInfo): string {
 export function ExportPanel({
   source,
   splitPoints,
-  initial
+  initial,
+  queue
 }: {
   source: PreviewSource
   splitPoints: number[]
   initial?: ExportInitial
+  queue: QueueJobView[]
 }): JSX.Element {
   const audioStreams = source.streams.filter((s) => s.type === 'audio')
   const subtitleStreams = source.streams.filter((s) => s.type === 'subtitle')
@@ -82,6 +85,26 @@ export function ExportPanel({
     },
     []
   )
+
+  // Removing a job this panel queued (before it wrote anything) gives its
+  // episode numbers back to the start field, unless the user typed another.
+  const queuedSteps = useRef<QueuedStep[]>([])
+  // Last seen state of every job, so a job cleared while we wait still
+  // counts with the episodes it wrote.
+  const lastSeen = useRef(new Map<string, QueueJobView>())
+  useEffect(() => {
+    for (const j of queue) lastSeen.current.set(j.id, j)
+    // During an export, only the field update waits until it ends.
+    if (exporting || queuedSteps.current.length === 0) return
+    const next = reconcileQueuedStart(startEpisode, queuedSteps.current, [...lastSeen.current.values()], queue)
+    queuedSteps.current = next.steps
+    if (next.start !== startEpisode) setStartEpisode(next.start)
+    // Runs on queue changes and when an export ends; startEpisode is read then.
+  }, [queue, exporting])
+  // The steps belong to the show and season they were queued for.
+  useEffect(() => {
+    queuedSteps.current = []
+  }, [showName, season])
 
   const naming = { showName, season, startEpisode, outputDir: outputDir ?? '' }
   const canExport = !exporting && !queueing && showName.trim() !== '' && !!outputDir && segments.length > 0
@@ -138,9 +161,13 @@ export function ExportPanel({
     if (!req) return
     setQueueing(true)
     try {
-      await queueAndRemember(window.api, req, settingsToRemember())
-      // The next job from this panel continues after these episodes.
-      setStartEpisode(nextStartEpisode(startEpisode, segments.length))
+      await queueAndRemember(window.api, req, settingsToRemember(), (jobs) => {
+        // The next job from this panel continues after these episodes.
+        const after = nextStartEpisode(startEpisode, segments.length)
+        const added = jobs[jobs.length - 1]
+        if (added) queuedSteps.current = [...queuedSteps.current, { jobId: added.id, before: startEpisode, after }]
+        setStartEpisode(after)
+      })
       setQueuedMsg(`Added “${showName.trim()}” (${segments.length} ep) to the queue`)
     } catch (e) {
       setQueuedMsg(`Could not add to the queue: ${e instanceof Error ? e.message : String(e)}`)

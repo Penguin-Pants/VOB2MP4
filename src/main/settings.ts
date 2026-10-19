@@ -2,9 +2,15 @@ import { app } from 'electron'
 import { join } from 'path'
 import { readFileSync, writeFileSync } from 'fs'
 import { nextStartEpisode } from '../shared/naming'
-import type { AppSettings, LastExportSettings, NamingOptions, SettingsPatch } from '../shared/types'
+import type {
+  AppSettings,
+  DialogFolder,
+  LastExportSettings,
+  NamingOptions,
+  SettingsPatch
+} from '../shared/types'
 
-/** Merge a settings patch, deep-merging `lastExport`. Pure. */
+/** Merge a settings patch, deep-merging `lastExport` and `lastDirs`. Pure. */
 export function mergeSettings(current: AppSettings, patch: SettingsPatch): AppSettings {
   const prev = current.lastExport
   const lastExport = patch.lastExport ? ({ ...prev, ...patch.lastExport } as LastExportSettings) : prev
@@ -13,11 +19,16 @@ export function mergeSettings(current: AppSettings, patch: SettingsPatch): AppSe
   if (prev && lastExport && lastExport !== prev && prev.showName === lastExport.showName && prev.season === lastExport.season) {
     lastExport.startEpisode = Math.max(prev.startEpisode, lastExport.startEpisode)
   }
-  return { ...current, lastExport }
+  return {
+    ...current,
+    lastExport,
+    lastDirs: patch.lastDirs ? { ...current.lastDirs, ...patch.lastDirs } : current.lastDirs
+  }
 }
 
+/** The settings file. VOB2MP4_SETTINGS_DIR overrides the folder (tests, scripts). */
 function settingsPath(): string {
-  return join(app.getPath('userData'), 'settings.json')
+  return join(process.env.VOB2MP4_SETTINGS_DIR || app.getPath('userData'), 'settings.json')
 }
 
 export function getSettings(): AppSettings {
@@ -36,6 +47,16 @@ export function updateSettings(patch: SettingsPatch): AppSettings {
     /* best-effort persistence */
   }
   return next
+}
+
+/** The folder a file dialog last used, as its `defaultPath`. */
+export function lastDir(kind: DialogFolder): string | undefined {
+  return getSettings().lastDirs?.[kind]
+}
+
+/** Remember the folder a file dialog used, for the next dialog of that kind. */
+export function rememberDir(kind: DialogFolder, dir: string): void {
+  updateSettings({ lastDirs: { [kind]: dir } })
 }
 
 /**

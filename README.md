@@ -35,7 +35,8 @@ Every push builds a portable `.exe` in GitHub Actions. Open the **Actions** tab 
 
 ## Development
 
-Requires Node 22+.
+Requires Node 22.12+ (Electron 43 needs it). `npm run dev` / `npm run preview` download the
+Electron binary on first run (Electron 42+ no longer does this at install time).
 
 ```bash
 npm install            # install dependencies

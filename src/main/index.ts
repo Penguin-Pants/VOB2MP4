@@ -1,12 +1,12 @@
 import { app, shell, BrowserWindow, ipcMain, dialog } from 'electron'
-import { join } from 'path'
+import { dirname, join } from 'path'
 import { ffmpegVersion, binariesPresent, killAllFfmpeg } from './ffmpeg'
 import { inspectPaths } from './inspect'
 import { MEDIA_EXTENSIONS } from './input'
 import { cancelPreview, extractFrame, generateFilmstrip } from './preview'
 import { runExport, waitForExports } from './export'
 import { addJob, clearFinished, listJobs, removeJob, runQueue, stopQueue } from './queue'
-import { getSettings, rememberCompletedExport, updateSettings } from './settings'
+import { getSettings, lastDir, rememberCompletedExport, rememberDir, updateSettings } from './settings'
 import { openProject, saveProject } from './project'
 import { cancelScan, scanBlackFrames } from './scan'
 import type {
@@ -66,36 +66,49 @@ ipcMain.handle('app:info', async () => {
   }
 })
 
+/** Return the picked files and remember their folder for the next input dialog. */
+function rememberPicked(res: Electron.OpenDialogReturnValue): string[] {
+  if (res.canceled) return []
+  if (res.filePaths[0]) rememberDir('input', dirname(res.filePaths[0]))
+  return res.filePaths
+}
+
 // IPC: pick a DVD folder (VIDEO_TS or a folder of loose VOBs).
 ipcMain.handle('dialog:openFolder', async (): Promise<string[]> => {
   const res = await dialog.showOpenDialog({
     title: 'Open a VIDEO_TS folder or a folder of VOB files',
+    defaultPath: lastDir('input'),
     properties: ['openDirectory']
   })
-  return res.canceled ? [] : res.filePaths
+  if (res.canceled) return []
+  // Start next time at the folder that holds this disc (its siblings are the next discs).
+  if (res.filePaths[0]) rememberDir('input', dirname(res.filePaths[0]))
+  return res.filePaths
 })
 
 // IPC: pick one or more loose .VOB files.
 ipcMain.handle('dialog:openVobFiles', async (): Promise<string[]> => {
   const res = await dialog.showOpenDialog({
     title: 'Select one or more .VOB files',
+    defaultPath: lastDir('input'),
     properties: ['openFile', 'multiSelections'],
     filters: [{ name: 'DVD video', extensions: ['vob', 'VOB'] }]
   })
-  return res.canceled ? [] : res.filePaths
+  return rememberPicked(res)
 })
 
 // IPC: pick one or more video files (.m4v/.mp4/…); each is its own program.
 ipcMain.handle('dialog:openMediaFiles', async (): Promise<string[]> => {
   const res = await dialog.showOpenDialog({
     title: 'Select one or more video files (each is its own disc)',
+    defaultPath: lastDir('input'),
     properties: ['openFile', 'multiSelections'],
     filters: [
       { name: 'Video files', extensions: [...MEDIA_EXTENSIONS] },
       { name: 'All files', extensions: ['*'] }
     ]
   })
-  return res.canceled ? [] : res.filePaths
+  return rememberPicked(res)
 })
 
 // IPC: inspect a selection (read-only) and classify it.
@@ -129,9 +142,12 @@ ipcMain.handle('preview:cancel', (): void => cancelPreview())
 ipcMain.handle('dialog:chooseOutputDir', async (): Promise<string | null> => {
   const res = await dialog.showOpenDialog({
     title: 'Choose output folder (a Season folder is created inside)',
+    defaultPath: lastDir('output'),
     properties: ['openDirectory', 'createDirectory']
   })
-  return res.canceled || res.filePaths.length === 0 ? null : res.filePaths[0]
+  if (res.canceled || res.filePaths.length === 0) return null
+  rememberDir('output', res.filePaths[0])
+  return res.filePaths[0]
 })
 
 // IPC: run an export, streaming progress back to the requesting window.

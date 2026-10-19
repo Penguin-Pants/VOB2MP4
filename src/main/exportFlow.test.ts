@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { exportAndRemember, nextFreeEpisode, queueAndRemember } from '../renderer/src/exportFlow'
+import { exportAndRemember, nextFreeEpisode, queueAndRemember, reconcileQueuedStart } from '../renderer/src/exportFlow'
 import type { AppSettings, ExportRequest, ExportResult, QueueJobView, SettingsPatch } from '../shared/types'
 
 // One episode from E04, so the next start is E05.
@@ -154,4 +154,67 @@ test('exportAndRemember moves past the episodes a failed export already wrote', 
 test('nextFreeEpisode counts only the written episodes of a failed job', () => {
   const failed = job('f', 1, 4, { status: 'error', outputs: ['/tv/S01E01.mp4'] })
   assert.equal(nextFreeEpisode(saved, [failed]), 2)
+})
+
+// The panel queued E01-E04 (field moved 1 -> 5), then E05-E08 (5 -> 9).
+const steps = [
+  { jobId: 'a', before: 1, after: 5 },
+  { jobId: 'b', before: 5, after: 9 }
+]
+
+test('reconcileQueuedStart steps the field back when queued jobs are removed', () => {
+  const both = [job('a', 1, 4), job('b', 5, 4)]
+  const afterB = reconcileQueuedStart(9, steps, both, [job('a', 1, 4)])
+  assert.deepEqual(afterB, { start: 5, steps: [steps[0]] })
+  assert.deepEqual(reconcileQueuedStart(5, afterB.steps, [job('a', 1, 4)], []), { start: 1, steps: [] })
+  // Both removed at once.
+  assert.equal(reconcileQueuedStart(9, steps, both, []).start, 1)
+})
+
+test('reconcileQueuedStart keeps the field while the last queued job is still queued', () => {
+  const both = [job('a', 1, 4), job('b', 5, 4)]
+  assert.deepEqual(reconcileQueuedStart(9, steps, both, both), { start: 9, steps })
+})
+
+test('reconcileQueuedStart keeps a number the user typed', () => {
+  const both = [job('a', 1, 4), job('b', 5, 4)]
+  assert.deepEqual(reconcileQueuedStart(12, steps, both, [job('a', 1, 4)]), { start: 12, steps: [] })
+})
+
+test('reconcileQueuedStart keeps the numbers of a job that wrote episodes', () => {
+  const done = [job('a', 1, 4), job('b', 5, 4, { status: 'done', outputs: ['/tv/e05.mp4'] })]
+  // A finished job is cleared from the queue: its episodes exist, so the field stays.
+  assert.deepEqual(reconcileQueuedStart(9, steps, done, [job('a', 1, 4)]), { start: 9, steps: [] })
+  // Still listed and done: stop tracking, keep the field.
+  assert.deepEqual(reconcileQueuedStart(9, steps, done, done), { start: 9, steps: [] })
+})
+
+test('reconcileQueuedStart moves to the first unwritten episode of a partial job', () => {
+  const one = [{ jobId: 'a', before: 1, after: 5 }]
+  // E01-E04 queued, E01 written, then the job failed (or was stopped).
+  const failed = [job('a', 1, 4, { status: 'error', outputs: ['/tv/e01.mp4'] })]
+  assert.deepEqual(reconcileQueuedStart(5, one, [job('a', 1, 4)], failed), { start: 2, steps: [] })
+  // The same job removed after it failed.
+  assert.deepEqual(reconcileQueuedStart(5, one, failed, []), { start: 2, steps: [] })
+})
+
+test('reconcileQueuedStart waits while the job is still running', () => {
+  const one = [{ jobId: 'a', before: 1, after: 5 }]
+  const running = [job('a', 1, 4, { status: 'running', outputs: ['/tv/e01.mp4'] })]
+  assert.deepEqual(reconcileQueuedStart(5, one, [job('a', 1, 4)], running), { start: 5, steps: one })
+})
+
+test('queueAndRemember reports the queued job before it saves the settings', async () => {
+  const order: string[] = []
+  const api = {
+    runExport: async (): Promise<ExportResult> => ({ ok: true, outputs: [] }),
+    queueAdd: async () => [job('a', 1, 4)],
+    getSettings: async (): Promise<AppSettings> => ({}),
+    updateSettings: async () => {
+      order.push('save')
+      return {}
+    }
+  }
+  await queueAndRemember(api, req, remember, (jobs) => order.push(`queued ${jobs[0].id}`))
+  assert.deepEqual(order, ['queued a', 'save'])
 })

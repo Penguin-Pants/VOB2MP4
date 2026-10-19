@@ -1,5 +1,7 @@
 import { dialog } from 'electron'
 import { readFile, writeFile } from 'fs/promises'
+import { dirname, join } from 'path'
+import { lastDir, rememberDir } from './settings'
 import { sanitizeFilename } from '../shared/naming'
 import type { ProjectFile } from '../shared/types'
 
@@ -10,10 +12,11 @@ export async function saveProject(project: ProjectFile): Promise<{ ok: boolean; 
   const suggested = `${sanitizeFilename(project.naming.showName) || 'project'}.${EXT}`
   const res = await dialog.showSaveDialog({
     title: 'Save project',
-    defaultPath: suggested,
+    defaultPath: join(lastDir('project') ?? '', suggested),
     filters: [{ name: 'VOB2MP4 project', extensions: [EXT] }]
   })
   if (res.canceled || !res.filePath) return { ok: false }
+  rememberDir('project', dirname(res.filePath))
   try {
     await writeFile(res.filePath, JSON.stringify(project, null, 2), 'utf8')
     return { ok: true, path: res.filePath }
@@ -26,10 +29,12 @@ export async function saveProject(project: ProjectFile): Promise<{ ok: boolean; 
 export async function openProject(): Promise<{ ok: boolean; project?: ProjectFile; error?: string }> {
   const res = await dialog.showOpenDialog({
     title: 'Open project',
+    defaultPath: lastDir('project'),
     properties: ['openFile'],
     filters: [{ name: 'VOB2MP4 project', extensions: [EXT] }]
   })
   if (res.canceled || res.filePaths.length === 0) return { ok: false }
+  rememberDir('project', dirname(res.filePaths[0]))
   try {
     const data = JSON.parse(await readFile(res.filePaths[0], 'utf8')) as ProjectFile
     if (data.version !== 1 || !data.source) return { ok: false, error: 'Not a valid project file.' }
