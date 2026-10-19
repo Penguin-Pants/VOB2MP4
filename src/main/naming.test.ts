@@ -4,7 +4,6 @@ import {
   sanitizeFilename,
   episodeFileName,
   seasonFolderName,
-  episodeRelPath,
   nextStartEpisode
 } from '../shared/naming'
 
@@ -27,10 +26,8 @@ test('episodeFileName respects startEpisode and high season numbers', () => {
   assert.equal(episodeFileName(naming, 7), 'Show - S12E12.mp4')
 })
 
-test('seasonFolderName and episodeRelPath', () => {
+test('seasonFolderName pads the season number', () => {
   assert.equal(seasonFolderName(3), 'Season 03')
-  const naming = { showName: 'Show', season: 2, startEpisode: 1, outputDir: '/out' }
-  assert.equal(episodeRelPath(naming, 0), 'Season 02/Show - S02E01.mp4')
 })
 
 test('episodeFileName falls back to "Show" when name is empty/illegal', () => {

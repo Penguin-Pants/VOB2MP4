@@ -92,6 +92,7 @@ export function looksLikeVideoTs(entryNames: string[]): boolean {
  *
  * - Files named `VTS_<set>_<part>.VOB` are grouped by their set, ordered by
  *   part. The menu VOB (part 0) is excluded from the joined program.
+ * - The disc menu VIDEO_TS.VOB is left out.
  * - Any other selected files are combined into one natural-sorted group,
  *   since the user selected them together as a single program.
  */
@@ -100,6 +101,8 @@ export function groupVobFiles(paths: string[]): VobGroup[] {
   const others: string[] = []
 
   for (const p of paths) {
+    // VIDEO_TS.VOB is the disc's first-play menu, never episode video.
+    if (basename(p).toLowerCase() === 'video_ts.vob') continue
     const parsed = parseVobName(p)
     if (parsed) {
       const list = sets.get(parsed.set) ?? []

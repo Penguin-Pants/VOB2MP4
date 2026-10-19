@@ -29,11 +29,9 @@ export interface ProbeResult {
   streams: MediaStreamInfo[]
 }
 
-export type InputKind = 'video_ts' | 'vob_files'
-
 /** A set of loose VOB files that together form one continuous program. */
 export interface VobGroup {
-  /** Stable id, e.g. "VTS_01" for a title set or "single:<basename>". */
+  /** Stable id, e.g. "VTS_01" for a title set or "media:<path>" for a video file. */
   id: string
   /** Human-friendly label shown in the UI. */
   label: string
