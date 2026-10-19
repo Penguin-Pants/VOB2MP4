@@ -64,7 +64,9 @@ test('runQueue marks a job as error when its export throws and continues', async
   })
   const [a, b] = listJobs()
   assert.equal(a.status, 'error')
-  assert.match(a.error ?? '', /disk gone/)
+  // The raw error text stays internal; the user gets a plain sentence.
+  assert.match(a.error ?? '', /^Export stopped\. /)
+  assert.doesNotMatch(a.error ?? '', /disk gone/)
   assert.equal(b.status, 'done')
 })
 

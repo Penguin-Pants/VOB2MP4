@@ -98,3 +98,16 @@ test('a cancelled frame request does not start its fallback ffmpeg run', needsFf
     assert.match(res.error, /Superseded/)
   })
 })
+
+test('a time past the last frame is not reported as a damaged source', needsFfmpeg, async () => {
+  await withClip(async (source) => {
+    // The program claims more time than the file holds, like a seek to the
+    // exact end of a DVD title: the engine succeeds but returns no picture.
+    if (source.kind !== 'files') return
+    const res = await extractFrame({ ...source, durationSec: 10, fileDurations: [10] }, 9)
+    assert.equal(res.ok, false)
+    if (res.ok) return
+    assert.match(res.error, /no picture at this time/i)
+    assert.doesNotMatch(res.error, /damaged/i)
+  })
+})

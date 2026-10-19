@@ -3,6 +3,7 @@ import type { FilmstripThumb, PreviewSource, QueueJobView, ScanResult } from '..
 import { clampSplitMove, normalizeSplitPoints, segmentsFromSplits } from '../../shared/segments'
 import { formatDuration, parseTimecode } from './format'
 import { TimelineTrack } from './TimelineTrack'
+import { UNEXPECTED } from '../../shared/userError'
 import { ExportPanel, type ExportInitial } from './ExportPanel'
 
 const FILMSTRIP_COUNT = 16
@@ -35,7 +36,7 @@ export function Preview({
   const [jumpText, setJumpText] = useState('')
   const [scanning, setScanning] = useState(false)
   const [scanFrac, setScanFrac] = useState(0)
-  const [scanMsg, setScanMsg] = useState<string | null>(null)
+  const [scanMsg, setScanMsg] = useState<{ text: string; ok: boolean } | null>(null)
 
   const reqToken = useRef(0)
   const scrubTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -153,21 +154,21 @@ export function Preview({
     try {
       res = await window.api.scanBlackFrames(source, 0.4)
     } catch (e) {
-      res = { ok: false, error: e instanceof Error ? e.message : String(e) }
+      res = { ok: false, error: UNEXPECTED }
     } finally {
       unsub()
     }
     if (gen !== scanGen.current) return
     setScanning(false)
     if (!res.ok) {
-      setScanMsg(`Scan failed: ${res.error}`)
+      setScanMsg({ text: `Scene-break scan stopped. ${res.error} You can still add splits by hand.`, ok: false })
       return
     }
     if (res.splits.length > 0) {
       onSplitPointsChange(normalizeSplitPoints([...splitPointsRef.current, ...res.splits], dur))
     }
     const found = res.splits.length > 0 ? `${res.splits.length} scene break(s)` : 'no black-frame scene breaks'
-    setScanMsg(res.cancelled ? `Scan cancelled. Found ${found} so far` : `Found ${found}`)
+    setScanMsg({ text: res.cancelled ? `Scan cancelled. Found ${found} so far` : `Found ${found}`, ok: true })
   }
 
   // Press "S" to add a split at the playhead (unless typing in a field).
@@ -196,7 +197,11 @@ export function Preview({
         </span>
       </div>
 
-      {error && <p className="status--bad small">Frame error: {error}</p>}
+      {error && (
+        <p className="status--bad small" role="alert">
+          Could not show this frame. {error}
+        </p>
+      )}
 
       <div className="preview__stage">
         {frameUrl ? (
@@ -316,7 +321,11 @@ export function Preview({
               Clear splits
             </button>
           )}
-          {scanMsg && <span className="muted small">{scanMsg}</span>}
+          {scanMsg && (
+            <span className={scanMsg.ok ? 'muted small' : 'status--bad small'} role={scanMsg.ok ? 'status' : 'alert'}>
+              {scanMsg.text}
+            </span>
+          )}
         </div>
 
         <div className="splits__cols">

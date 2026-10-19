@@ -3,6 +3,7 @@ import { BrowserWindow } from 'electron'
 import { runExport } from './export'
 import { segmentsFromSplits } from '../shared/segments'
 import type { ExportProgress, ExportRequest, ExportResult, QueueJobView } from '../shared/types'
+import { plainReason } from '../shared/userError'
 
 interface Job {
   id: string
@@ -106,7 +107,7 @@ export async function runQueue(run: typeof runExport = runExport): Promise<void>
           abort.signal
         )
       } catch (e) {
-        res = { ok: false, outputs: [], error: e instanceof Error ? e.message : String(e) }
+        res = { ok: false, outputs: [], error: `Export stopped. ${plainReason(e)}` }
       } finally {
         currentAbort = null
       }

@@ -12,6 +12,7 @@ import type {
   SettingsPatch
 } from '../../shared/types'
 import { segmentsFromSplits } from '../../shared/segments'
+import { UNEXPECTED } from '../../shared/userError'
 import { exportAndRemember, queueAndRemember, reconcileQueuedStart, type QueuedStep } from './exportFlow'
 import { episodeFileName, nextStartEpisode, seasonFolderName } from '../../shared/naming'
 
@@ -74,7 +75,7 @@ export function ExportPanel({
   const [queueing, setQueueing] = useState(false)
   const [progress, setProgress] = useState<ExportProgress | null>(null)
   const [result, setResult] = useState<ExportResult | null>(null)
-  const [queuedMsg, setQueuedMsg] = useState<string | null>(null)
+  const [queuedMsg, setQueuedMsg] = useState<{ text: string; ok: boolean } | null>(null)
 
   // Leaving the program (Back) ends its export, as it ends its scan: no
   // panel would be left to show the progress or to cancel it.
@@ -168,9 +169,9 @@ export function ExportPanel({
         if (added) queuedSteps.current = [...queuedSteps.current, { jobId: added.id, before: startEpisode, after }]
         setStartEpisode(after)
       })
-      setQueuedMsg(`Added “${showName.trim()}” (${segments.length} ep) to the queue`)
+      setQueuedMsg({ text: `Added “${showName.trim()}” (${segments.length} ep) to the queue`, ok: true })
     } catch (e) {
-      setQueuedMsg(`Could not add to the queue: ${e instanceof Error ? e.message : String(e)}`)
+      setQueuedMsg({ text: `Could not add to the queue. ${UNEXPECTED}`, ok: false })
     } finally {
       setQueueing(false)
     }
@@ -178,8 +179,8 @@ export function ExportPanel({
 
   async function onSaveProject(): Promise<void> {
     const res = await window.api.saveProject(currentProject())
-    if (res.ok) setQueuedMsg(`Saved project${res.path ? ` to ${res.path}` : ''}`)
-    else if (res.error) setQueuedMsg(`Save failed: ${res.error}`)
+    if (res.ok) setQueuedMsg({ text: `Saved project${res.path ? ` to ${res.path}` : ''}`, ok: true })
+    else if (res.error) setQueuedMsg({ text: `Could not save the project. ${res.error}`, ok: false })
   }
 
   function toggleAudio(index: number): void {
@@ -207,7 +208,7 @@ export function ExportPanel({
       if (res.outputs.length > 0) setStartEpisode(nextStartEpisode(startEpisode, res.outputs.length))
       setResult(res)
     } catch (e) {
-      setResult({ ok: false, outputs: [], error: e instanceof Error ? e.message : String(e) })
+      setResult({ ok: false, outputs: [], error: UNEXPECTED })
     } finally {
       exportingRef.current = false
       unsub()
@@ -353,7 +354,11 @@ export function ExportPanel({
         <button className="ghost" onClick={onSaveProject} disabled={exporting}>
           💾 Save project…
         </button>
-        {queuedMsg && <span className="ok small">{queuedMsg}</span>}
+        {queuedMsg && (
+          <span className={queuedMsg.ok ? 'ok small' : 'status--bad small'} role={queuedMsg.ok ? 'status' : 'alert'}>
+            {queuedMsg.text}
+          </span>
+        )}
       </div>
 
       {progress && (
@@ -370,10 +375,10 @@ export function ExportPanel({
 
       {result && (
         <div className="export__row">
-          <span className={result.ok ? 'ok small' : 'status--bad small'}>
+          <span className={result.ok ? 'ok small' : 'status--bad small'} role={result.ok ? 'status' : 'alert'}>
             {result.ok
               ? `✓ Exported ${result.outputs.length} episode(s) to ${outputDir}`
-              : `Export failed: ${result.error}`}
+              : result.error}
           </span>
           {result.ok && result.outputs.length > 0 && (
             <button className="ghost" onClick={() => void window.api.showItemInFolder(result.outputs[0])}>

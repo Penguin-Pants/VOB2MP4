@@ -11,6 +11,7 @@ import { Preview } from './Preview'
 import { QueueView } from './QueueView'
 import type { ExportInitial } from './ExportPanel'
 import { nextFreeEpisode } from './exportFlow'
+import { UNEXPECTED } from '../../shared/userError'
 
 function initialFromSettings(le: LastExportSettings | undefined): ExportInitial | undefined {
   if (!le) return undefined
@@ -75,7 +76,7 @@ export default function App(): JSX.Element {
       setLoadNonce((n) => n + 1)
       setSource(p.source)
     } else if (res.error) {
-      setError(res.error)
+      setError(`Could not open the project. ${res.error}`)
     }
   }
 
@@ -101,9 +102,9 @@ export default function App(): JSX.Element {
     try {
       const res = await window.api.inspect(paths)
       if (res.ok) setInput(res.input)
-      else setError(res.error)
-    } catch (e) {
-      setError(String(e))
+      else setError(`Could not open that selection. ${res.error}`)
+    } catch {
+      setError(`Could not open that selection. ${UNEXPECTED}`)
     } finally {
       setBusy(false)
     }
@@ -158,7 +159,11 @@ export default function App(): JSX.Element {
               {busy && <span className="muted">Inspecting…</span>}
             </section>
 
-            {error && <p className="status status--bad">Error: {error}</p>}
+            {error && (
+              <p className="status status--bad" role="alert">
+                {error}
+              </p>
+            )}
 
             {!input && !busy && !error && (
               <p className="muted">
@@ -181,9 +186,9 @@ export default function App(): JSX.Element {
       <footer className="app__footer muted small">
         {info ? (
           <>
-            v{info.appVersion} · Electron {info.electronVersion} · FFmpeg{' '}
+            v{info.appVersion} · Electron {info.electronVersion} · Video engine{' '}
             <span className={info.ffmpegVersion ? 'ok' : 'bad'}>
-              {info.ffmpegVersion ? 'ready' : 'not found'}
+              {info.ffmpegVersion ? 'ready' : 'missing. Download the portable app again and use the new copy.'}
             </span>
           </>
         ) : (
