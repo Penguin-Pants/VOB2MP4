@@ -129,7 +129,7 @@ R1, R2, R3, Z1, B1, B2, B4, E1, E3, E4. AC1, AC2, AC5, AC6, AC7, AC8.
 1. `src/renderer/src/App.tsx`:
    - Split `open()` into the picker part and an inspect function. The buttons and the drop both call the inspect function. Error text, prefix and `busy` handling stay the same.
    - Make the start-screen content (the fragment at `App.tsx:144-180`) the drop zone. Handle `dragenter`, `dragover`, `dragleave` and `drop`.
-   - On drop: when `busy`, do nothing (E4). Else get paths through the Phase 1 preload function, apply the Phase 2 rule: `ignore` does nothing, `project` sets the E1 message as the error, `open` calls the inspect function.
+   - On drop: when `busy`, do nothing (E4). Else get paths through the Phase 1 preload function, apply the Phase 2 rule: `ignore` does nothing, `project` sets the E1 message as the error and does not change the remembered input folder (B3), `open` calls the inspect function.
    - Show the highlight only when the drag holds files (`dataTransfer.types` includes `Files`). Clear it on leave and on drop. Nested child elements must not make it flicker.
 2. `src/renderer/src/index.css`: add the highlight style with existing tokens. Include visible text so the cue does not rely on color only.
 3. `docs/error-messages.csv`: add a row for the E1 message with location, trigger, severity, message and status, in the format of the other rows.
@@ -156,7 +156,7 @@ R1, R2, R3, Z1, B1, B2, B4, E1, E3, E4. AC1, AC2, AC5, AC6, AC7, AC8.
 | Drop during "Inspecting…": no second inspect. Drop selected text: no error | AC7 |
 | Cause an error, then drop a valid file: error goes away. Drop `notes.txt`: E3 error | AC8 |
 | Drop on Preview and queue screens: nothing changes | AC3 |
-| After a drop, open a picker: it starts at the dropped folder | AC4 |
+| After a drop, open a picker: it starts at the dropped folder. After a `.v2m`-only drop, it does not change | AC4 |
 
 **Acceptance criteria**
 

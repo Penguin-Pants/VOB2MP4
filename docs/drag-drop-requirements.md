@@ -24,7 +24,7 @@ Status: decision-complete. Source: discovery session, 2026-10-19.
 
 - **B1.** A drop gives the same result as the buttons: "Inspecting…" status, then the program list or an error with the prefix "Could not open that selection."
 - **B2.** A drop clears the current error before it starts, the same as `open()` (`src/renderer/src/App.tsx:93`).
-- **B3.** A drop updates the remembered input folder with the same rule as the pickers (folder of the first path, `src/main/index.ts:72-90`).
+- **B3.** A drop that opens input updates the remembered input folder with the same rule as the pickers (folder of the first path, `src/main/index.ts:72-90`). A `.v2m`-only drop (E1) opens no input and does not change it. Project folders use a separate remembered folder (`src/main/project.ts:21,39`).
 - **B4.** While files are held over the start screen, a highlight shows (outline or overlay plus short text).
 
 ### Edge cases and failure behavior
@@ -48,7 +48,7 @@ Status: decision-complete. Source: discovery session, 2026-10-19.
 - **AC1.** A dropped VIDEO_TS folder shows the same title list as "Open VIDEO_TS / folder…" for the same folder. (R1, B1)
 - **AC2.** Dropped `.VOB` and video files show the same program list as the matching buttons. A mixed drop shows both kinds. (R2, R3, B1)
 - **AC3.** A drop on the Preview screen or the queue screen changes nothing on screen and does not navigate the window. (Z2, C3)
-- **AC4.** After a drop, the next picker dialog opens at the folder of the first dropped path. (B3)
+- **AC4.** After a drop that opens input, the next input picker dialog opens at the folder of the first dropped path. After a `.v2m`-only drop, the remembered input folder does not change. (B3)
 - **AC5.** The highlight shows while files are held over the start screen and goes away on leave or drop. (B4)
 - **AC6.** A `.v2m`-only drop shows the E1 message. A mixed `.v2m` drop opens the other items. (E1, E2)
 - **AC7.** A drop while "Inspecting…" shows starts no second inspect. A drop with no file paths shows no error. (E4, E5)
