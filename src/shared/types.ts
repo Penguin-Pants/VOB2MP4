@@ -207,6 +207,11 @@ export interface QueueJobView {
   error?: string
 }
 
+/** Result of a black-frame scan. A cancelled scan keeps what it found so far. */
+export type ScanResult =
+  | { ok: true; splits: number[]; cancelled: boolean }
+  | { ok: false; error: string }
+
 /** Result of a single frame extraction (JPEG as a data URL). */
 export type FrameResult =
   | { ok: true; dataUrl: string; timeSec: number }

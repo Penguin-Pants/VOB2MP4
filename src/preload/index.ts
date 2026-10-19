@@ -10,6 +10,7 @@ import type {
   PreviewSource,
   ProjectFile,
   QueueJobView,
+  ScanResult,
   SettingsPatch
 } from '../shared/types'
 
@@ -82,8 +83,8 @@ const api = {
   /** Open a project file (shows an open dialog). */
   openProject: (): Promise<{ ok: boolean; project?: ProjectFile; error?: string }> =>
     ipcRenderer.invoke('project:open'),
-  /** Scan for black frames; resolves with candidate split-point times. */
-  scanBlackFrames: (source: PreviewSource, minBlackSec: number): Promise<number[]> =>
+  /** Scan for black frames; resolves with candidate split-point times or an error. */
+  scanBlackFrames: (source: PreviewSource, minBlackSec: number): Promise<ScanResult> =>
     ipcRenderer.invoke('scan:black', source, minBlackSec),
   /** Cancel an in-progress black-frame scan. */
   cancelScan: (): Promise<void> => ipcRenderer.invoke('scan:cancel'),

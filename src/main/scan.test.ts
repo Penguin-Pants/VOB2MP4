@@ -1,13 +1,13 @@
-import { test } from 'node:test'
-import assert from 'node:assert/strict'
-import { mock } from 'node:test'
+import { mock, test } from 'node:test'
 import { createRequire } from 'module'
+import assert from 'node:assert/strict'
 import { mkdtemp, rm } from 'fs/promises'
 import { join } from 'path'
 import { tmpdir } from 'os'
 import { execFileSync } from 'child_process'
-import { parseBlackIntervals, candidateSplitsFromBlack, scanBlackFrames } from './scan'
+import { cancelScan, candidateSplitsFromBlack, parseBlackIntervals, scanBlackFrames } from './scan'
 import { binariesPresent, binaryPath } from './ffmpeg'
+import type { PreviewSource } from '../shared/types'
 
 const sampleLog = `
 frame=  100 fps=0.0 q=-0.0 size=N/A time=00:00:04.00 bitrate=N/A
@@ -42,34 +42,125 @@ test('parseBlackIntervals handles empty input', () => {
   assert.deepEqual(parseBlackIntervals(''), [])
 })
 
-test(
-  'scanBlackFrames still resolves when the temp concat list cannot be deleted',
-  { skip: !binariesPresent() && 'ffmpeg not fetched (npm run fetch-ffmpeg)' },
-  async () => {
-    const dir = await mkdtemp(join(tmpdir(), 'vob2mp4-test-'))
-    const fsp = createRequire(__filename)('fs/promises') as typeof import('fs/promises')
-    try {
-      const files = ['a.mkv', 'b.mkv'].map((name) => {
-        const file = join(dir, name)
-        execFileSync(binaryPath('ffmpeg'), [
-          '-v', 'error', '-f', 'lavfi', '-i', 'testsrc=d=1:s=64x48:r=25', '-c:v', 'ffv1', file
-        ])
-        return file
-      })
-      // Deleting the list fails (e.g. a virus scanner holds it on Windows).
-      const rmMock = mock.method(fsp, 'rm', async () => {
-        throw new Error('EBUSY: resource busy or locked')
-      })
-      const res = await scanBlackFrames(
-        { kind: 'files', label: 'x', durationSec: 2, frameRate: 25, streams: [], files, fileDurations: [1, 1] },
-        0.4,
-        () => undefined
-      )
-      assert.ok(rmMock.mock.calls.some((c) => String(c.arguments[0]).includes('vob2mp4-concat-')))
-      assert.ok(Array.isArray(res))
-    } finally {
-      mock.restoreAll()
-      await rm(dir, { recursive: true, force: true })
-    }
+const needsFfmpeg = { skip: !binariesPresent() && 'ffmpeg not fetched (npm run fetch-ffmpeg)' }
+
+function fileSource(file: string, durationSec: number): PreviewSource {
+  return {
+    kind: 'files',
+    label: 'clip',
+    durationSec,
+    frameRate: 25,
+    streams: [],
+    files: [file],
+    fileDurations: [durationSec]
   }
-)
+}
+
+/** 3 s picture, 1 s black, 3 s picture. */
+async function withBlackBreakClip(fn: (source: PreviewSource) => Promise<void>): Promise<void> {
+  const dir = await mkdtemp(join(tmpdir(), 'vob2mp4-test-'))
+  try {
+    const file = join(dir, 'clip.mkv')
+    execFileSync(binaryPath('ffmpeg'), [
+      '-v', 'error',
+      '-f', 'lavfi', '-i', 'testsrc=d=3:s=160x120:r=25',
+      '-f', 'lavfi', '-i', 'color=black:d=1:s=160x120:r=25',
+      '-f', 'lavfi', '-i', 'testsrc=d=3:s=160x120:r=25',
+      '-filter_complex', '[0:v][1:v][2:v]concat=n=3:v=1[v]', '-map', '[v]',
+      '-c:v', 'ffv1', file
+    ])
+    await fn(fileSource(file, 7))
+  } finally {
+    await rm(dir, { recursive: true, force: true })
+  }
+}
+
+test('scanBlackFrames finds the black break', needsFfmpeg, async () => {
+  await withBlackBreakClip(async (source) => {
+    const res = await scanBlackFrames(source, 0.4, () => undefined)
+    assert.equal(res.ok, true)
+    if (!res.ok) return
+    assert.equal(res.cancelled, false)
+    assert.equal(res.splits.length, 1)
+    assert.ok(Math.abs(res.splits[0] - 3.5) < 0.2)
+  })
+})
+
+test('scanBlackFrames reports an ffmpeg failure instead of "no breaks"', needsFfmpeg, async () => {
+  const res = await scanBlackFrames(fileSource(join(tmpdir(), 'vob2mp4-missing.mkv'), 7), 0.4, () => undefined)
+  assert.equal(res.ok, false)
+  if (res.ok) return
+  assert.ok(res.error.length > 0)
+})
+
+test('scanBlackFrames reports a cancelled scan', needsFfmpeg, async () => {
+  await withBlackBreakClip(async (source) => {
+    const pending = scanBlackFrames(source, 0.4, () => undefined)
+    cancelScan()
+    const res = await pending
+    assert.equal(res.ok, true)
+    if (!res.ok) return
+    assert.equal(res.cancelled, true)
+  })
+})
+
+test('cancelScan stops a scan whose ffmpeg is already running', needsFfmpeg, async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'vob2mp4-test-'))
+  try {
+    // Long enough that ffmpeg reports progress well before it finishes.
+    const file = join(dir, 'long.mpg')
+    execFileSync(binaryPath('ffmpeg'), [
+      '-v', 'error', '-f', 'lavfi', '-i', 'testsrc=d=1200:s=320x240:r=25', '-c:v', 'mpeg2video', file
+    ])
+    let progressed = false
+    let atCancel = 0
+    let maxFraction = 0
+    const res = await scanBlackFrames(fileSource(file, 1200), 0.4, (fraction) => {
+      maxFraction = Math.max(maxFraction, fraction)
+      // First progress line: ffmpeg is decoding, so cancel kills a live process.
+      if (!progressed && fraction > 0) {
+        progressed = true
+        atCancel = fraction
+        cancelScan()
+      }
+    })
+    assert.equal(progressed, true)
+    // A killed ffmpeg stops reporting; one that kept running would reach ~1.
+    assert.ok(maxFraction - atCancel < 0.2, `scan kept running from ${atCancel} to ${maxFraction}`)
+    assert.equal(res.ok, true)
+    if (!res.ok) return
+    assert.equal(res.cancelled, true)
+  } finally {
+    await rm(dir, { recursive: true, force: true })
+  }
+})
+
+test('scanBlackFrames keeps its result when the temp concat list cannot be deleted', needsFfmpeg, async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'vob2mp4-test-'))
+  const fsp = createRequire(__filename)('fs/promises') as typeof import('fs/promises')
+  try {
+    const files = ['a.mkv', 'b.mkv'].map((name) => {
+      const file = join(dir, name)
+      execFileSync(binaryPath('ffmpeg'), [
+        '-v', 'error', '-f', 'lavfi', '-i', 'testsrc=d=1:s=64x48:r=25', '-c:v', 'ffv1', file
+      ])
+      return file
+    })
+    const realRm = fsp.rm
+    // Only the concat list delete fails (e.g. a virus scanner holds it on Windows).
+    const rmMock = mock.method(fsp, 'rm', async (path: string, opts?: object) => {
+      if (String(path).includes('vob2mp4-concat-')) throw new Error('EBUSY: resource busy or locked')
+      return realRm(path, opts)
+    })
+    const res = await scanBlackFrames(
+      { kind: 'files', label: 'x', durationSec: 2, frameRate: 25, streams: [], files, fileDurations: [1, 1] },
+      0.4,
+      () => undefined
+    )
+    assert.ok(rmMock.mock.calls.some((c) => String(c.arguments[0]).includes('vob2mp4-concat-')))
+    assert.equal(res.ok, true)
+  } finally {
+    mock.restoreAll()
+    await rm(dir, { recursive: true, force: true })
+  }
+})

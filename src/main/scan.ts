@@ -1,6 +1,6 @@
 import { runFfmpeg, type FfmpegRun } from './ffmpeg'
 import { resolveInput } from './export'
-import type { PreviewSource } from '../shared/types'
+import type { PreviewSource, ScanResult } from '../shared/types'
 
 export interface BlackInterval {
   start: number
@@ -32,55 +32,77 @@ export function candidateSplitsFromBlack(
     .filter((t) => t > edgeGuardSec && t < duration - edgeGuardSec)
 }
 
-let currentScan: FfmpegRun | null = null
+interface ScanState {
+  run: FfmpegRun | null
+  cancelled: boolean
+}
+
+let currentScan: ScanState | null = null
 
 /** Cancel an in-progress scan, if any. */
 export function cancelScan(): void {
   if (currentScan) {
-    currentScan.kill()
+    currentScan.cancelled = true
+    currentScan.run?.kill()
     currentScan = null
   }
+}
+
+/** Last non-empty stderr line: the actual error, after ffmpeg's info output. */
+function lastLine(text: string): string {
+  const lines = text.split(/\r?\n/).filter((l) => l.trim() !== '')
+  return lines.length > 0 ? lines[lines.length - 1].trim() : ''
 }
 
 /**
  * Scan a program for black frames and return candidate episode split points.
  * Decodes the whole program (no encoding) so it's slow but progress is
- * reported. Cancellable via cancelScan(); returns whatever was found so far.
+ * reported. One scan at a time: a new scan cancels the old one.
+ * Cancellable via cancelScan(); a cancelled scan returns what it found so far.
  */
 export async function scanBlackFrames(
   source: PreviewSource,
   minBlackSec: number,
   onProgress: (fraction: number) => void
-): Promise<number[]> {
-  const { inputArgs, input, cleanup } = await resolveInput(source)
-  const args = [
-    '-hide_banner',
-    '-progress',
-    'pipe:1',
-    '-nostats',
-    ...inputArgs,
-    '-i',
-    input,
-    '-vf',
-    `blackdetect=d=${minBlackSec}:pic_th=0.98`,
-    '-an',
-    '-sn',
-    '-f',
-    'null',
-    '-'
-  ]
-
-  const run = runFfmpeg(args, (t) => {
-    if (source.durationSec > 0) onProgress(Math.min(1, t / source.durationSec))
-  })
-  currentScan = run
+): Promise<ScanResult> {
+  cancelScan()
+  // Registered before any await, so a cancel during setup is not lost.
+  const scan: ScanState = { run: null, cancelled: false }
+  currentScan = scan
+  let cleanup = async (): Promise<void> => undefined
   try {
-    const { stderr } = await run.done
-    return candidateSplitsFromBlack(parseBlackIntervals(stderr), source.durationSec)
-  } catch {
-    return []
+    const resolved = await resolveInput(source)
+    cleanup = resolved.cleanup
+    const args = [
+      '-hide_banner',
+      '-progress',
+      'pipe:1',
+      '-nostats',
+      ...resolved.inputArgs,
+      '-i',
+      resolved.input,
+      '-vf',
+      `blackdetect=d=${minBlackSec}:pic_th=0.98`,
+      '-an',
+      '-sn',
+      '-f',
+      'null',
+      '-'
+    ]
+    if (scan.cancelled) return { ok: true, splits: [], cancelled: true }
+    const run = runFfmpeg(args, (t) => {
+      if (source.durationSec > 0) onProgress(Math.min(1, t / source.durationSec))
+    })
+    scan.run = run
+    const { code, stderr } = await run.done
+    const splits = candidateSplitsFromBlack(parseBlackIntervals(stderr), source.durationSec)
+    if (scan.cancelled) return { ok: true, splits, cancelled: true }
+    if (code !== 0) return { ok: false, error: lastLine(stderr) || `ffmpeg exit ${code}` }
+    return { ok: true, splits, cancelled: false }
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : String(e) }
   } finally {
-    if (currentScan === run) currentScan = null
+    if (currentScan === scan) currentScan = null
     // The temp concat list is disposable: a failed delete must not turn the
     // scan result into a rejection (the UI would stay in "Scanning…").
     await cleanup().catch(() => undefined)

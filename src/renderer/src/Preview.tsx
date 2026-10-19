@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import type { FilmstripThumb, PreviewSource } from '../../shared/types'
+import type { FilmstripThumb, PreviewSource, ScanResult } from '../../shared/types'
 import { clampSplitMove, normalizeSplitPoints, segmentsFromSplits } from '../../shared/segments'
 import { formatDuration, parseTimecode } from './format'
 import { TimelineTrack } from './TimelineTrack'
@@ -123,20 +123,49 @@ export function Preview({
     )
   }
 
+  // The scan runs for minutes: read split points at the end, not at the start,
+  // so splits added meanwhile are kept.
+  const splitPointsRef = useRef(splitPoints)
+  useEffect(() => {
+    splitPointsRef.current = splitPoints
+  }, [splitPoints])
+  const scanGen = useRef(0)
+  useEffect(() => {
+    setScanning(false)
+    setScanMsg(null)
+    return () => {
+      // Leaving the preview (or its program) ends its scan; a late result
+      // must not land on the next program's split points.
+      scanGen.current++
+      void window.api.cancelScan()
+    }
+  }, [source])
+
   async function scanScenes(): Promise<void> {
+    const gen = scanGen.current
     setScanning(true)
     setScanFrac(0)
     setScanMsg(null)
     const unsub = window.api.onScanProgress(setScanFrac)
-    const candidates = await window.api.scanBlackFrames(source, 0.4)
-    unsub()
-    setScanning(false)
-    if (candidates.length > 0) {
-      onSplitPointsChange(normalizeSplitPoints([...splitPoints, ...candidates], dur))
-      setScanMsg(`Found ${candidates.length} scene break(s)`)
-    } else {
-      setScanMsg('No black-frame scene breaks found')
+    let res: ScanResult
+    try {
+      res = await window.api.scanBlackFrames(source, 0.4)
+    } catch (e) {
+      res = { ok: false, error: e instanceof Error ? e.message : String(e) }
+    } finally {
+      unsub()
     }
+    if (gen !== scanGen.current) return
+    setScanning(false)
+    if (!res.ok) {
+      setScanMsg(`Scan failed: ${res.error}`)
+      return
+    }
+    if (res.splits.length > 0) {
+      onSplitPointsChange(normalizeSplitPoints([...splitPointsRef.current, ...res.splits], dur))
+    }
+    const found = res.splits.length > 0 ? `${res.splits.length} scene break(s)` : 'no black-frame scene breaks'
+    setScanMsg(res.cancelled ? `Scan cancelled. Found ${found} so far` : `Found ${found}`)
   }
 
   // Press "S" to add a split at the playhead (unless typing in a field).
