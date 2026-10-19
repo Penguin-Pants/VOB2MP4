@@ -30,7 +30,7 @@ Status: decision-complete. Source: discovery session, 2026-10-19.
 ### Edge cases and failure behavior
 
 - **E1.** A drop of only `.v2m` files shows a specific message that tells the user to use "Open project…".
-- **E2.** A drop of `.v2m` files mixed with other items: the `.v2m` files are ignored (current inspect behavior for unknown files) and the other items open.
+- **E2.** A drop of `.v2m` files mixed with other items: the `.v2m` files are ignored and the other items open. The `.v2m` files do not change the remembered input folder (B3).
 - **E3.** A drop of only unknown files shows the current inspect error (`src/main/inspect.ts:136-138`).
 - **E4.** A drop while inspecting (busy) is ignored, the same as the disabled buttons.
 - **E5.** A drop with no file paths (text, links, browser content) is ignored with no error.

@@ -85,13 +85,13 @@ E1, E2, E5, C5. AC6, AC7 (no-path part).
 
 1. Create `src/main/drop.test.ts` first. Prove it fails on assertions against a stub.
 2. Create `src/renderer/src/drop.ts`:
-   - A function that takes the dropped paths and returns one of: `ignore` (no paths), `project` (every path ends in `.v2m`, case-insensitive), `open` (all paths, unchanged).
+   - A function that takes the dropped paths and returns one of: `ignore` (no paths), `project` (every path ends in `.v2m`, case-insensitive), `open` (the non-`.v2m` paths, order kept).
    - The E1 message as an exported constant, written in ASD-STE100. Example from the requirements: "Drop does not open projects. Use Open project…".
 3. `package.json`: add `src/main/drop.test.ts` to `scripts.test`.
 
 **Implementation notes**
 
-- `open` passes all paths, including `.v2m` ones. `inspectPaths` already ignores unknown files (`src/main/inspect.ts:122-133`). This gives E2 with no extra filter.
+- `open` drops the `.v2m` paths. Reason: Phase 1 remembers `dirname(paths[0])`, so a `.v2m` first in the list would set the remembered input folder to a project folder (B3). Other unknown files still go to inspect, which ignores them (`src/main/inspect.ts:122-133`).
 - Define the `v2m` extension locally in `drop.ts`. The renderer cannot import `src/main/project.ts` (it imports Electron). Do not move `EXT`; one string does not justify a shared module.
 
 **Tests**
@@ -101,7 +101,7 @@ E1, E2, E5, C5. AC6, AC7 (no-path part).
 | Empty list | `ignore` (E5) |
 | One `.v2m` | `project` (E1) |
 | Two `.V2M` (upper case) | `project` (E1) |
-| `.v2m` plus `.mp4` | `open` with both paths (E2) |
+| `.v2m` then `.mp4` | `open` with only the `.mp4` path (E2, B3) |
 | Folder path, `.VOB`, `.mkv` | `open` with all paths, order kept (R1-R3) |
 | Unknown file only (`notes.txt`) | `open` (E3 comes from inspect) |
 
@@ -152,7 +152,7 @@ R1, R2, R3, Z1, B1, B2, B4, E1, E3, E4. AC1, AC2, AC5, AC6, AC7, AC8.
 | Drop a VIDEO_TS folder: same titles as the folder button | AC1 |
 | Drop 3 VOB parts, then 2 `.mp4` files, then a mix | AC2 |
 | Hold files over the start screen: highlight shows, leaves on exit and drop | AC5 |
-| Drop one `.v2m`: E1 message. Drop `.v2m` plus `.mp4`: the `.mp4` opens | AC6 |
+| Drop one `.v2m`: E1 message. Drop `.v2m` plus `.mp4`: the `.mp4` opens and the next picker starts at the `.mp4` folder | AC6, AC4 |
 | Drop during "Inspecting…": no second inspect. Drop selected text: no error | AC7 |
 | Cause an error, then drop a valid file: error goes away. Drop `notes.txt`: E3 error | AC8 |
 | Drop on Preview and queue screens: nothing changes | AC3 |
