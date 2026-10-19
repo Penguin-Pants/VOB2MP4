@@ -1,0 +1,35 @@
+:root {
+  --brand-villainRed: #E10606;
+  --brand-shadowBlack: #0B0B0B;
+  --brand-charcoal: #111111;
+  --brand-steelGray: #4A4A4A;
+  --brand-metallicSilver: #8F959C;
+  --brand-highlightWhite: #EDEDED;
+  --surface-canvas: #0B0B0B;
+  --surface-panel: #171717;
+  --surface-raised: #202020;
+  --surface-hover: #292929;
+  --surface-border: #363636;
+  --text-primary: #EDEDED;
+  --text-secondary: #BEC1C5;
+  --text-muted: #A3A6AA;
+  --semantic-accent: #E10606;
+  --semantic-accentText: #FFFFFF;
+  --semantic-focus: #FF7373;
+  --semantic-playhead: #E10606;
+  --semantic-splitPoint: #64D9C3;
+  --semantic-chapter: #A4A9B0;
+  --semantic-queued: #9CA3AF;
+  --semantic-running: #74BAFF;
+  --semantic-success: #6DD6A0;
+  --semantic-danger: #FF8585;
+  --semantic-selectedSurface: #272025;
+  --shape-controlRadius: 6px;
+  --shape-panelRadius: 10px;
+  --shape-stroke: 2px;
+  --spacing-unit: 4px;
+  --motion-fast: 120ms;
+  --motion-normal: 180ms;
+  --motion-reduced: none;
+}
+@media (prefers-reduced-motion: reduce) { :root { --motion-fast: 0ms; --motion-normal: 0ms; } }

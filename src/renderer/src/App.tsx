@@ -112,9 +112,12 @@ export default function App(): JSX.Element {
   return (
     <div className="app">
       <header className="app__header">
-        <div>
-          <h1>VOB2MP4</h1>
-          <p className="app__tagline">Convert &amp; split DVD rips into per-episode MP4s</p>
+        <div className="app__brand">
+          <span className="app__mark" aria-hidden="true" />
+          <div>
+            <h1>VOB2MP4</h1>
+            <p className="app__tagline">Convert &amp; split DVD rips into per-episode MP4s</p>
+          </div>
         </div>
         <button className="ghost app__queuebtn" onClick={() => setShowQueue((s) => !s)}>
           {showQueue ? 'Close queue' : `Queue (${queue.length})`}

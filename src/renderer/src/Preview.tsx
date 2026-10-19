@@ -214,6 +214,7 @@ export function Preview({
 
       <input
         className="preview__scrub"
+        aria-label="Playhead position"
         type="range"
         min={0}
         max={dur}
@@ -274,6 +275,7 @@ export function Preview({
         <span className="preview__jump">
           <input
             type="text"
+            aria-label="Jump to time"
             placeholder="h:mm:ss"
             value={jumpText}
             onChange={(e) => setJumpText(e.target.value)}
@@ -289,7 +291,9 @@ export function Preview({
 
       <div className="splits">
         <div className="splits__actions">
-          <button onClick={addSplit}>✂ Split at playhead (S)</button>
+          <button className="primary" onClick={addSplit}>
+            ✂ Split at playhead (S)
+          </button>
           {(chapterStarts?.length ?? 0) > 0 && (
             <button className="ghost" onClick={proposeFromChapters}>
               Propose from chapters ({chapterStarts!.length})
@@ -326,16 +330,36 @@ export function Preview({
                   <li key={i}>
                     <code>{formatDuration(sp)}</code>
                     <span className="splitlist__btns">
-                      <button className="ghost" onClick={() => goTo(sp)} title="go to">
+                      <button
+                        className="ghost"
+                        onClick={() => goTo(sp)}
+                        title="go to"
+                        aria-label={`Go to split ${i + 1}`}
+                      >
                         ▶
                       </button>
-                      <button className="ghost" onClick={() => setSplit(i, sp - 1 / fps)} title="nudge back">
+                      <button
+                        className="ghost"
+                        onClick={() => setSplit(i, sp - 1 / fps)}
+                        title="nudge back"
+                        aria-label={`Nudge split ${i + 1} back one frame`}
+                      >
                         −f
                       </button>
-                      <button className="ghost" onClick={() => setSplit(i, sp + 1 / fps)} title="nudge fwd">
+                      <button
+                        className="ghost"
+                        onClick={() => setSplit(i, sp + 1 / fps)}
+                        title="nudge fwd"
+                        aria-label={`Nudge split ${i + 1} forward one frame`}
+                      >
                         +f
                       </button>
-                      <button className="ghost" onClick={() => deleteSplit(i)} title="delete">
+                      <button
+                        className="ghost"
+                        onClick={() => deleteSplit(i)}
+                        title="delete"
+                        aria-label={`Delete split ${i + 1}`}
+                      >
                         ✕
                       </button>
                     </span>
@@ -355,7 +379,12 @@ export function Preview({
                     {formatDuration(s.startSec)} → {formatDuration(s.endSec)}
                   </code>
                   <span className="muted small">({formatDuration(s.endSec - s.startSec)})</span>
-                  <button className="ghost" onClick={() => goTo(s.startSec)} title="go to start">
+                  <button
+                    className="ghost"
+                    onClick={() => goTo(s.startSec)}
+                    title="go to start"
+                    aria-label={`Go to start of episode ${s.index + 1}`}
+                  >
                     ▶
                   </button>
                 </li>

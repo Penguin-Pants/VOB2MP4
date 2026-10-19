@@ -20,6 +20,13 @@ See [`VISION.md`](./VISION.md) for the full project vision and the finalized tec
 > queue many discs and run unattended. Save/reopen projects; last-used settings are remembered.
 > Needs validation on real Windows hardware + discs.
 
+## Branding
+
+The UI uses the approved **Claw Cut** identity (Dr. Claw Development family). `branding/` is the
+design source and stays unchanged. The app ships byte-identical copies:
+`build/icon.ico`, `src/renderer/src/assets/icon-master.svg` and `src/renderer/src/tokens.css`.
+`src/main/branding.test.ts` fails if a copy drifts from its source.
+
 ## Tech stack
 
 - **Electron + TypeScript + React** (built with `electron-vite`)
@@ -57,6 +64,9 @@ scripts/
   download-ffmpeg.mjs   Fetches static FFmpeg binaries for the current platform
 resources/
   ffmpeg/    Bundled binaries land here (git-ignored)
+build/
+  icon.ico   Windows app icon (copy of branding/assets/exported/icon.ico)
+branding/    Approved Claw Cut design source (master SVGs, exports, tokens, mockups)
 .github/workflows/
   build.yml  Builds the portable .exe on Windows
 ```

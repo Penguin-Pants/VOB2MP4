@@ -1,13 +1,15 @@
+/* Claw Cut theme. tokens.css is an unchanged copy of branding/theme/tokens.css. */
+@import './tokens.css';
+
 :root {
-  --bg: #1b1d23;
-  --panel: #24272f;
-  --panel2: #2b2f39;
-  --text: #e7e9ee;
-  --muted: #9aa1ad;
-  --accent: #5aa0ff;
-  --ok: #54d18c;
-  --bad: #ff6b6b;
-  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  /* Product-specific: input and control outlines need 3:1 against panels. */
+  --control-border: #75797f;
+  --accent-hover: #c00505;
+  --track-bg: var(--brand-charcoal);
+  --font-ui: 'Segoe UI', system-ui, -apple-system, Roboto, sans-serif;
+  --font-mono: 'Cascadia Mono', 'Cascadia Code', Consolas, monospace;
+  font-family: var(--font-ui);
+  color-scheme: dark;
 }
 
 * {
@@ -16,26 +18,47 @@
 
 body {
   margin: 0;
-  background: var(--bg);
-  color: var(--text);
+  background: var(--surface-canvas);
+  color: var(--text-primary);
+}
+
+:focus-visible {
+  outline: var(--shape-stroke) solid var(--semantic-focus);
+  outline-offset: 2px;
 }
 
 .app {
   display: flex;
   flex-direction: column;
   min-height: 100vh;
-  padding: 22px 26px;
+  padding: 20px 24px;
 }
 
 .app__header {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
+  flex-wrap: wrap;
   gap: 12px;
+  padding-bottom: 16px;
+  margin-bottom: 20px;
+  border-bottom: 1px solid var(--surface-border);
+}
+.app__brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.app__mark {
+  flex: 0 0 auto;
+  width: 40px;
+  height: 40px;
+  background: url('./assets/icon-master.svg') center / contain no-repeat;
 }
 .app__header h1 {
   margin: 0;
   font-size: 26px;
+  line-height: 1.1;
   letter-spacing: 0.5px;
 }
 .app__queuebtn {
@@ -43,8 +66,9 @@ body {
 }
 
 .app__tagline {
-  margin: 2px 0 16px;
-  color: var(--muted);
+  margin: 2px 0 0;
+  color: var(--text-secondary);
+  font-size: 13px;
 }
 
 .app__main {
@@ -52,58 +76,103 @@ body {
 }
 
 .app__footer {
-  margin-top: 18px;
+  margin-top: 20px;
   padding-top: 12px;
-  border-top: 1px solid #30343d;
+  border-top: 1px solid var(--surface-border);
 }
 
 .muted {
-  color: var(--muted);
+  color: var(--text-muted);
 }
 .small {
   font-size: 12px;
 }
 .ok {
-  color: var(--ok);
+  color: var(--semantic-success);
 }
 .bad {
-  color: var(--bad);
+  color: var(--semantic-danger);
 }
 
 .toolbar {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 10px;
+  gap: 12px;
   margin-bottom: 16px;
 }
+.toolbar button {
+  padding: 12px 16px;
+}
 
+/* Buttons: neutral by default. Red only for the signature cut and run actions. */
 button {
-  background: var(--accent);
-  color: #06122a;
-  border: none;
-  border-radius: 7px;
-  padding: 9px 14px;
+  background: var(--surface-raised);
+  color: var(--text-primary);
+  border: 1px solid var(--control-border);
+  border-radius: var(--shape-controlRadius);
+  padding: 8px 14px;
+  font: inherit;
   font-size: 14px;
   font-weight: 600;
   cursor: pointer;
+  transition: background-color var(--motion-fast) ease;
 }
 button:hover {
-  filter: brightness(1.08);
+  background: var(--surface-hover);
 }
 button:disabled {
   opacity: 0.5;
   cursor: default;
 }
+button:disabled:hover {
+  background: var(--surface-raised);
+}
+button.primary {
+  background: var(--semantic-accent);
+  border-color: var(--semantic-accent);
+  color: var(--semantic-accentText);
+}
+button.primary:hover {
+  background: var(--accent-hover);
+}
+button.primary:disabled:hover {
+  background: var(--semantic-accent);
+}
+button.ghost {
+  background: transparent;
+  border-color: var(--surface-border);
+  font-weight: 500;
+  padding: 6px 10px;
+}
+button.ghost:hover {
+  background: var(--surface-hover);
+  border-color: var(--control-border);
+}
+button.ghost:disabled:hover {
+  background: transparent;
+  border-color: var(--surface-border);
+}
+
+input,
+select {
+  font: inherit;
+}
+input[type='radio'],
+input[type='checkbox'],
+input[type='range'] {
+  accent-color: var(--semantic-accent);
+}
 
 .card {
-  background: var(--panel);
-  border: 1px solid #30343d;
-  border-radius: 10px;
+  background: var(--surface-panel);
+  border: 1px solid var(--surface-border);
+  border-radius: var(--shape-panelRadius);
   padding: 16px 18px;
 }
 
 .card--nested {
-  background: var(--panel2);
+  background: var(--surface-raised);
   margin-top: 12px;
   padding: 12px 14px;
 }
@@ -111,17 +180,21 @@ button:disabled {
 h3,
 h4 {
   margin: 4px 0 10px;
-  color: var(--accent);
-  font-size: 15px;
+  color: var(--text-secondary);
+  font-size: 13px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
 }
 
 code {
-  font-family: "Cascadia Code", Consolas, monospace;
+  font-family: var(--font-mono);
   font-size: 12px;
+  font-variant-numeric: tabular-nums;
 }
 
 .status--bad {
-  color: var(--bad);
+  color: var(--semantic-danger);
 }
 
 /* Titles table */
@@ -129,26 +202,28 @@ code {
   width: 100%;
   border-collapse: collapse;
   font-size: 14px;
+  font-variant-numeric: tabular-nums;
 }
 .titles th {
   text-align: left;
-  color: var(--muted);
+  color: var(--text-muted);
   font-weight: 500;
   padding: 4px 8px;
-  border-bottom: 1px solid #353a44;
+  border-bottom: 1px solid var(--surface-border);
 }
 .titles td {
   padding: 6px 8px;
-  border-bottom: 1px solid #2c2f38;
+  border-bottom: 1px solid var(--surface-border);
 }
 .titles tbody tr {
   cursor: pointer;
 }
 .titles tbody tr:hover {
-  background: #2b2f39;
+  background: var(--surface-hover);
 }
 .titles tbody tr.sel {
-  background: #2f3a4f;
+  background: var(--semantic-selectedSurface);
+  box-shadow: inset 3px 0 0 var(--semantic-accent);
 }
 
 /* Loose VOB groups */
@@ -156,12 +231,13 @@ code {
   display: flex;
   justify-content: space-between;
   align-items: baseline;
+  flex-wrap: wrap;
   gap: 12px;
 }
 .files {
   margin: 8px 0;
   padding-left: 20px;
-  color: var(--muted);
+  color: var(--text-muted);
 }
 .files li {
   padding: 2px 0;
@@ -183,7 +259,7 @@ code {
   padding: 1px 0;
 }
 .tracks__label {
-  color: var(--muted);
+  color: var(--text-muted);
   font-size: 12px;
   text-transform: uppercase;
   letter-spacing: 0.4px;
@@ -193,25 +269,16 @@ code {
   margin-top: 10px;
 }
 
-button.ghost {
-  background: #333a47;
-  color: var(--text);
-  font-weight: 500;
-  padding: 6px 10px;
-}
-button.ghost:hover {
-  background: #3c4453;
-}
-
 /* Preview / timeline */
 .preview {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 12px;
 }
 .preview__bar {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 12px;
 }
 .preview__title {
@@ -221,10 +288,11 @@ button.ghost:hover {
   display: flex;
   justify-content: center;
   background: #000;
-  border: 1px solid #30343d;
-  border-radius: 8px;
+  border: 1px solid var(--surface-border);
+  border-radius: var(--shape-panelRadius);
   min-height: 280px;
   align-items: center;
+  overflow: hidden;
 }
 .preview__frame {
   max-height: 52vh;
@@ -232,24 +300,26 @@ button.ghost:hover {
   display: block;
 }
 .preview__frame--empty {
-  color: var(--muted);
+  color: var(--text-muted);
   height: 280px;
   display: flex;
   align-items: center;
 }
 .preview__time {
+  font-family: var(--font-mono);
+  font-size: 18px;
   font-variant-numeric: tabular-nums;
 }
 .preview__scrub {
   width: 100%;
-  accent-color: var(--accent);
 }
 .filmstrip {
   display: flex;
   gap: 2px;
   overflow-x: auto;
-  border: 1px solid #30343d;
-  border-radius: 6px;
+  background: var(--track-bg);
+  border: 1px solid var(--surface-border);
+  border-radius: var(--shape-controlRadius);
   padding: 2px;
 }
 .filmstrip img {
@@ -260,7 +330,8 @@ button.ghost:hover {
 }
 .filmstrip img:hover {
   opacity: 1;
-  outline: 2px solid var(--accent);
+  outline: var(--shape-stroke) solid var(--brand-metallicSilver);
+  outline-offset: -2px;
 }
 .preview__controls {
   display: flex;
@@ -275,29 +346,34 @@ button.ghost:hover {
 }
 .preview__jump input {
   width: 92px;
-  background: var(--panel2);
-  border: 1px solid #3a4150;
-  border-radius: 6px;
-  color: var(--text);
+  background: var(--surface-raised);
+  border: 1px solid var(--control-border);
+  border-radius: var(--shape-controlRadius);
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
   padding: 6px 8px;
 }
 
-/* Timeline markers track */
+/* Timeline markers track. Each marker differs by shape, not color alone:
+   chapter = short silver tick, split = mint line with a triangle head above
+   the track, playhead = red line with a round head. */
 .ttrack {
   position: relative;
-  height: 26px;
-  background: #14161b;
-  border: 1px solid #30343d;
-  border-radius: 6px;
+  height: 32px;
+  margin-top: 10px;
+  background: var(--track-bg);
+  border: 1px solid var(--control-border);
+  border-radius: var(--shape-controlRadius);
   cursor: pointer;
   touch-action: none;
 }
 .ttrack__chapter {
   position: absolute;
-  top: 0;
+  top: 45%;
   bottom: 0;
   width: 1px;
-  background: #4a5260;
+  background: var(--semantic-chapter);
   pointer-events: none;
 }
 .ttrack__playhead {
@@ -305,23 +381,51 @@ button.ghost:hover {
   top: 0;
   bottom: 0;
   width: 2px;
-  background: var(--accent);
+  margin-left: -1px;
+  background: var(--semantic-playhead);
   pointer-events: none;
+}
+.ttrack__playhead::before {
+  content: '';
+  position: absolute;
+  top: -4px;
+  left: -4px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--semantic-playhead);
 }
 .ttrack__split {
   position: absolute;
-  top: -3px;
+  top: -10px;
   bottom: -3px;
-  width: 10px;
-  margin-left: -5px;
-  background: var(--ok);
-  border: 1px solid #0c2a18;
-  border-radius: 3px;
+  width: 14px;
+  margin-left: -7px;
   cursor: ew-resize;
 }
-.ttrack__split.dragging,
-.ttrack__split:hover {
-  background: #7be6ab;
+/* The visible line and head; the wider box around them is the grab area. */
+.ttrack__split::after {
+  content: '';
+  position: absolute;
+  top: 8px;
+  bottom: 0;
+  left: 6px;
+  width: 2px;
+  background: var(--semantic-splitPoint);
+}
+.ttrack__split::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 1px;
+  border-left: 6px solid transparent;
+  border-right: 6px solid transparent;
+  border-bottom: 9px solid var(--semantic-splitPoint);
+}
+.ttrack__split.dragging::after,
+.ttrack__split:hover::after {
+  left: 5px;
+  width: 4px;
 }
 
 /* Split + segment panels */
@@ -331,8 +435,9 @@ button.ghost:hover {
 .splits__actions {
   display: flex;
   flex-wrap: wrap;
+  align-items: center;
   gap: 8px;
-  margin-bottom: 10px;
+  margin-bottom: 12px;
 }
 .splits__cols {
   display: grid;
@@ -352,7 +457,10 @@ button.ghost:hover {
   align-items: center;
   gap: 8px;
   padding: 3px 0;
-  border-bottom: 1px solid #2c2f38;
+  border-bottom: 1px solid var(--surface-border);
+}
+.splitlist li code {
+  color: var(--semantic-splitPoint);
 }
 .splitlist__btns {
   margin-left: auto;
@@ -361,11 +469,12 @@ button.ghost:hover {
 }
 .splitlist__btns button,
 .seglist button {
-  padding: 2px 7px;
+  padding: 2px 8px;
   font-size: 12px;
 }
 .seglist__n {
-  color: var(--accent);
+  color: var(--text-secondary);
+  font-weight: 600;
   width: 46px;
 }
 .seglist code {
@@ -394,37 +503,39 @@ button.ghost:hover {
   flex-direction: column;
   gap: 4px;
   font-size: 13px;
-  color: var(--muted);
+  color: var(--text-secondary);
 }
 .export input[type='text'],
 .export input[type='number'],
 .export input:not([type]),
 .export select {
-  background: var(--panel2);
-  border: 1px solid #3a4150;
-  border-radius: 6px;
-  color: var(--text);
+  background: var(--surface-panel);
+  border: 1px solid var(--control-border);
+  border-radius: var(--shape-controlRadius);
+  color: var(--text-primary);
   padding: 6px 8px;
   font-size: 14px;
 }
-.export__check {
+/* .export prefix: beats the column layout of `.export label`. */
+.export .export__check {
   flex-direction: row;
   align-items: center;
   gap: 6px;
-  color: var(--text);
+  color: var(--text-primary);
 }
 .export__modes {
   border: none;
   padding: 0;
   margin: 0;
   display: flex;
+  flex-wrap: wrap;
   gap: 18px;
 }
 .export__modes label {
   flex-direction: row;
   align-items: center;
   gap: 6px;
-  color: var(--text);
+  color: var(--text-primary);
 }
 .export__tracks {
   align-items: flex-start;
@@ -440,36 +551,47 @@ button.ghost:hover {
 }
 .bar {
   height: 8px;
-  background: #14161b;
-  border: 1px solid #30343d;
+  background: var(--track-bg);
+  border: 1px solid var(--control-border);
   border-radius: 5px;
   overflow: hidden;
 }
 .bar__fill {
   height: 100%;
-  background: var(--accent);
-  transition: width 0.2s ease;
+  background: var(--semantic-running);
+  transition: width var(--motion-normal) ease;
 }
 
-/* Batch queue */
+/* Batch queue. Status is always a text badge; color only repeats it. */
 .queue__list {
   list-style: none;
-  margin: 0;
+  margin: 12px 0 0;
   padding: 0;
 }
 .queue__job {
-  background: var(--panel);
-  border: 1px solid #30343d;
-  border-radius: 8px;
+  background: var(--surface-panel);
+  border: 1px solid var(--surface-border);
+  border-left-width: 4px;
+  border-radius: var(--shape-panelRadius);
   padding: 10px 12px;
   margin-bottom: 8px;
 }
+.queue__job--queued {
+  border-left-color: var(--semantic-queued);
+}
 .queue__job--running {
-  border-color: var(--accent);
+  border-color: var(--semantic-running);
+}
+.queue__job--done {
+  border-left-color: var(--semantic-success);
+}
+.queue__job--error {
+  border-left-color: var(--semantic-danger);
 }
 .queue__head {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 10px;
 }
 .queue__rm {
@@ -478,21 +600,71 @@ button.ghost:hover {
 }
 .badge {
   font-size: 11px;
+  font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.4px;
   padding: 2px 7px;
+  border: 1px solid currentColor;
   border-radius: 4px;
-  background: #333a47;
-  color: var(--text);
+  background: var(--surface-raised);
+  color: var(--semantic-queued);
 }
 .badge--running {
-  background: #234a7a;
+  color: var(--semantic-running);
 }
 .badge--done {
-  background: #1f5b3c;
-  color: var(--ok);
+  color: var(--semantic-success);
 }
 .badge--error {
-  background: #5b2330;
-  color: var(--bad);
+  color: var(--semantic-danger);
+}
+
+@media (max-width: 960px) {
+  .app {
+    padding: 16px;
+  }
+  .export__grid {
+    grid-template-columns: 1fr 1fr;
+  }
+  .export__grid > :first-child {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 720px) {
+  .splits__cols {
+    grid-template-columns: 1fr;
+  }
+  .preview__jump {
+    margin-left: 0;
+  }
+}
+
+/* Windows high-contrast themes drop background colors, so the timeline
+   markers and progress fill take system colors instead. */
+@media (forced-colors: active) {
+  .ttrack__chapter,
+  .ttrack__playhead,
+  .ttrack__playhead::before,
+  .ttrack__split::before,
+  .ttrack__split::after,
+  .bar__fill {
+    forced-color-adjust: none;
+  }
+  .ttrack__chapter {
+    background: GrayText;
+  }
+  .ttrack__playhead,
+  .ttrack__playhead::before {
+    background: Highlight;
+  }
+  .ttrack__split::after {
+    background: LinkText;
+  }
+  .ttrack__split::before {
+    border-bottom-color: LinkText;
+  }
+  .bar__fill {
+    background: Highlight;
+  }
 }

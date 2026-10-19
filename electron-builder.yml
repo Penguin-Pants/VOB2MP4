@@ -17,6 +17,7 @@ extraResources:
       - "**/*"
 
 win:
+  icon: build/icon.ico
   target:
     - portable
 

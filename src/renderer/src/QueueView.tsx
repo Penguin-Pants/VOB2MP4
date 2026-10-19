@@ -25,7 +25,11 @@ export function QueueView({
           ← Back
         </button>
         <strong className="preview__title">Batch queue ({jobs.length})</strong>
-        <button onClick={() => void window.api.queueRun()} disabled={!anyQueued || anyRunning}>
+        <button
+          className="primary"
+          onClick={() => void window.api.queueRun()}
+          disabled={!anyQueued || anyRunning}
+        >
           {anyRunning ? 'Running…' : '▶ Run queue'}
         </button>
         {anyRunning && (
@@ -59,6 +63,8 @@ export function QueueView({
                   <button
                     className="ghost queue__rm"
                     onClick={() => void window.api.queueRemove(j.id)}
+                    title="remove from queue"
+                    aria-label={`Remove ${j.showName || j.label} from queue`}
                   >
                     ✕
                   </button>
