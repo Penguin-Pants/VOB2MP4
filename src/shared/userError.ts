@@ -19,7 +19,9 @@ const ENGINE_MISSING =
   'The video engine of VOB2MP4 is missing. Download the portable app again and use the new copy.'
 const DAMAGED =
   'The video data could not be read. The source may be damaged or incomplete at this point. Check it in a video player, or rip the disc again.'
-export const NO_PICTURE = 'There is no picture at this time. Move the playhead a little earlier.'
+const NO_PICTURE = 'There is no picture at this time. Move the playhead a little earlier.'
+const ENGINE_FAILED =
+  'The video engine could not process this video, possibly because of an unusual video format. Try again. If it happens again, check the source in a video player.'
 export const UNEXPECTED = 'An unexpected problem occurred. Try again. If it happens again, restart VOB2MP4.'
 
 const BY_CODE: Record<string, string> = {
@@ -41,10 +43,26 @@ export function plainReason(e: unknown): string {
   return (code && BY_CODE[code]) || UNEXPECTED
 }
 
+/** Engine output that means the input itself could not be read or decoded. */
+const INPUT_DAMAGE =
+  /Invalid data found|moov atom not found|Error opening input|error while decoding|corrupt|concealing|Invalid NAL|decode_slice_header|Header missing|non-existing PPS/i
+
 /** The reason for a failed video engine run, from its error output. */
 export function videoReason(stderr: string): string {
   if (/No space left on device/i.test(stderr)) return FULL
   if (/Permission denied/i.test(stderr)) return NO_ACCESS
   if (/No such file or directory/i.test(stderr)) return NOT_FOUND
-  return DAMAGED
+  // Only blame the source when the engine says the input is bad: an output
+  // side failure (for example an encoder that rejects the size) is not damage.
+  return INPUT_DAMAGE.test(stderr) ? DAMAGED : ENGINE_FAILED
+}
+
+/**
+ * The reason a preview frame came back empty. An input that opens and
+ * decodes but gives no picture means the time is past the last frame (the
+ * end of a title); decode errors still mean damage.
+ */
+export function frameReason(code: number | null, stderr: string): string {
+  const noOutput = code === 0 || /Nothing was written into output file/.test(stderr)
+  return noOutput && !INPUT_DAMAGE.test(stderr) ? NO_PICTURE : videoReason(stderr)
 }

@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { UserError, plainReason, videoReason } from '../shared/userError'
+import { UserError, frameReason, plainReason, videoReason } from '../shared/userError'
 
 const errno = (code: string, extra: object = {}): Error =>
   Object.assign(new Error(`${code}: raw system text, open 'C:\\secret\\path'`), { code, ...extra })
@@ -65,5 +65,32 @@ test('video engine output for a missing input, a full disk or no access', () => 
   assert.match(videoReason("/rips/VTS_01_1.VOB: No such file or directory"), /not there/i)
   assert.match(videoReason('av_interleaved_write_frame(): No space left on device'), /full/i)
   assert.match(videoReason("/out/S01E01.mp4.part: Permission denied"), /access/i)
-  assert.match(videoReason(''), /damaged/i)
+  assert.match(videoReason(''), /could not process/i)
+})
+
+// Real output of a 160x121 source: the H.264 encoder rejects the odd height.
+const ENCODER_FAILURE = `[libx264 @ 0x55] height not divisible by 2 (160x121)
+[vost#0:0/libx264 @ 0x55] Error while opening encoder - maybe incorrect parameters such as bit_rate, rate, width or height.
+[out#0/mp4 @ 0x55] Nothing was written into output file, because at least one of its streams received no packets.`
+
+test('an engine failure that is not about the input does not blame the source', () => {
+  const msg = videoReason(ENCODER_FAILURE)
+  assertPlain(msg)
+  assert.doesNotMatch(msg, /damaged|rip the disc/i)
+  assert.match(msg, /could not process/i)
+})
+
+test('a frame request past the last picture says so', () => {
+  assert.match(frameReason(0, ''), /no picture at this time/i)
+  const tooFar = '[out#0/image2pipe @ 0x55] Nothing was written into output file, because at least one of its streams received no packets.'
+  assert.match(frameReason(234, tooFar), /no picture at this time/i)
+})
+
+test('a frame request that hits decode errors reports damage, not the playhead', () => {
+  const decodeErrors = `[h264 @ 0x55] error while decoding MB 12 7, bytestream -5
+[h264 @ 0x55] concealing 300 DC, 300 AC, 300 MV errors in I frame
+[out#0/image2pipe @ 0x55] Nothing was written into output file, because at least one of its streams received no packets.`
+  const msg = frameReason(234, decodeErrors)
+  assert.match(msg, /damaged/i)
+  assert.doesNotMatch(msg, /playhead/i)
 })

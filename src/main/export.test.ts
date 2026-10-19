@@ -149,6 +149,8 @@ test(
       }
       const res = await runExport(exportRequest(source, dir), () => undefined)
       assert.equal(res.ok, false)
+      // The source is fine; the failure must not tell the user to re-rip it.
+      assert.doesNotMatch(res.error ?? '', /damaged|rip the disc/i)
       await assert.rejects(stat(join(dir, 'Season 01', 'Show - S01E01.mp4')), { code: 'ENOENT' })
     } finally {
       await rm(dir, { recursive: true, force: true })
