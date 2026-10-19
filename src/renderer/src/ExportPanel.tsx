@@ -89,18 +89,22 @@ export function ExportPanel({
   // Removing a job this panel queued (before it wrote anything) gives its
   // episode numbers back to the start field, unless the user typed another.
   const queuedSteps = useRef<QueuedStep[]>([])
-  const prevQueue = useRef(queue)
+  // Last seen state of every job, so a job cleared while we wait still
+  // counts with the episodes it wrote.
+  const lastSeen = useRef(new Map<string, QueueJobView>())
   useEffect(() => {
-    // During an export, keep the pre-export queue to compare with once it ends.
-    if (exporting) return
-    const prev = prevQueue.current
-    prevQueue.current = queue
-    if (queuedSteps.current.length === 0) return
-    const next = reconcileQueuedStart(startEpisode, queuedSteps.current, prev, queue)
+    for (const j of queue) lastSeen.current.set(j.id, j)
+    // During an export, only the field update waits until it ends.
+    if (exporting || queuedSteps.current.length === 0) return
+    const next = reconcileQueuedStart(startEpisode, queuedSteps.current, [...lastSeen.current.values()], queue)
     queuedSteps.current = next.steps
     if (next.start !== startEpisode) setStartEpisode(next.start)
     // Runs on queue changes and when an export ends; startEpisode is read then.
   }, [queue, exporting])
+  // The steps belong to the show and season they were queued for.
+  useEffect(() => {
+    queuedSteps.current = []
+  }, [showName, season])
 
   const naming = { showName, season, startEpisode, outputDir: outputDir ?? '' }
   const canExport = !exporting && !queueing && showName.trim() !== '' && !!outputDir && segments.length > 0
