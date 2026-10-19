@@ -26,8 +26,9 @@ export function mergeSettings(current: AppSettings, patch: SettingsPatch): AppSe
   }
 }
 
+/** The settings file. VOB2MP4_SETTINGS_DIR overrides the folder (tests, scripts). */
 function settingsPath(): string {
-  return join(app.getPath('userData'), 'settings.json')
+  return join(process.env.VOB2MP4_SETTINGS_DIR || app.getPath('userData'), 'settings.json')
 }
 
 export function getSettings(): AppSettings {
