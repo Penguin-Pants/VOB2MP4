@@ -63,10 +63,11 @@ export async function queueAndRemember(
   api: ExportFlowApi,
   req: ExportRequest,
   remember: SettingsPatch
-): Promise<void> {
-  await api.queueAdd(req)
+): Promise<QueueJobView[]> {
+  const jobs = await api.queueAdd(req)
   const startEpisode = (await savedStartFor(api, req)) ?? req.naming.startEpisode
   await saveSettings(api, { ...remember, lastExport: { ...remember.lastExport, startEpisode } })
+  return jobs
 }
 
 /**
@@ -88,4 +89,37 @@ export function nextFreeEpisode(
     if (count > 0) next = Math.max(next, nextStartEpisode(job.startEpisode, count))
   }
   return next
+}
+
+/** A start-episode change the export panel made itself when it queued a job. */
+export interface QueuedStep {
+  jobId: string
+  before: number
+  after: number
+}
+
+/**
+ * Step the panel's start episode back when the jobs it queued are removed
+ * before they wrote anything, latest job first. Stops (and forgets the
+ * steps) once the user typed another number or a job wrote episodes, since
+ * those numbers are then deliberate or used.
+ */
+export function reconcileQueuedStart(
+  start: number,
+  steps: QueuedStep[],
+  prevJobs: QueueJobView[],
+  jobs: QueueJobView[]
+): { start: number; steps: QueuedStep[] } {
+  const left = [...steps]
+  while (left.length > 0) {
+    const top = left[left.length - 1]
+    const job = jobs.find((j) => j.id === top.jobId) ?? prevJobs.find((j) => j.id === top.jobId)
+    const stillQueued = jobs.some((j) => j.id === top.jobId)
+    if (job && (job.outputs.length > 0 || job.status === 'done')) return { start, steps: [] }
+    if (stillQueued) break
+    if (start !== top.after) return { start, steps: [] }
+    start = top.before
+    left.pop()
+  }
+  return { start, steps: left }
 }

@@ -135,6 +135,7 @@ export default function App(): JSX.Element {
             onSplitPointsChange={setSplitPoints}
             exportInitial={exportInitial}
             exportKey={`${source.kind}:${source.label}:${source.durationSec}:${loadNonce}`}
+            queue={queue}
           />
         ) : !showQueue ? (
           <>
