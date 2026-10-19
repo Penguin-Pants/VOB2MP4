@@ -1,5 +1,6 @@
 import { useRef, useState } from 'react'
 import { clampSplitMove } from '../../shared/segments'
+import { formatDuration } from './format'
 
 export function TimelineTrack({
   duration,
@@ -41,7 +42,7 @@ export function TimelineTrack({
       }}
     >
       {(chapterStarts ?? []).map((c, i) => (
-        <div key={`ch-${i}`} className="ttrack__chapter" style={{ left: pct(c) }} title={`chapter`} />
+        <div key={`ch-${i}`} className="ttrack__chapter" style={{ left: pct(c) }} title={`Chapter · ${formatDuration(c)}`} />
       ))}
 
       <div className="ttrack__playhead" style={{ left: pct(timeSec) }} />
@@ -53,7 +54,7 @@ export function TimelineTrack({
             key={index}
             className={`ttrack__split${drag?.index === index ? ' dragging' : ''}`}
             style={{ left: pct(shown) }}
-            title={'drag to move'}
+            title={`Split ${index + 1} · ${formatDuration(shown)} · drag to move`}
             onPointerDown={(e) => {
               e.stopPropagation()
               e.preventDefault()

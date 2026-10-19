@@ -32,6 +32,8 @@ function createWindow(): void {
     show: false,
     autoHideMenuBar: true,
     title: 'VOB2MP4',
+    // Claw Cut canvas, so the window does not flash white before the UI paints.
+    backgroundColor: '#0B0B0B',
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       sandbox: false,
