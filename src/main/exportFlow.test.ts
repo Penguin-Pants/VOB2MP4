@@ -188,3 +188,33 @@ test('reconcileQueuedStart keeps the numbers of a job that wrote episodes', () =
   // Still listed and done: stop tracking, keep the field.
   assert.deepEqual(reconcileQueuedStart(9, steps, done, done), { start: 9, steps: [] })
 })
+
+test('reconcileQueuedStart moves to the first unwritten episode of a partial job', () => {
+  const one = [{ jobId: 'a', before: 1, after: 5 }]
+  // E01-E04 queued, E01 written, then the job failed (or was stopped).
+  const failed = [job('a', 1, 4, { status: 'error', outputs: ['/tv/e01.mp4'] })]
+  assert.deepEqual(reconcileQueuedStart(5, one, [job('a', 1, 4)], failed), { start: 2, steps: [] })
+  // The same job removed after it failed.
+  assert.deepEqual(reconcileQueuedStart(5, one, failed, []), { start: 2, steps: [] })
+})
+
+test('reconcileQueuedStart waits while the job is still running', () => {
+  const one = [{ jobId: 'a', before: 1, after: 5 }]
+  const running = [job('a', 1, 4, { status: 'running', outputs: ['/tv/e01.mp4'] })]
+  assert.deepEqual(reconcileQueuedStart(5, one, [job('a', 1, 4)], running), { start: 5, steps: one })
+})
+
+test('queueAndRemember reports the queued job before it saves the settings', async () => {
+  const order: string[] = []
+  const api = {
+    runExport: async (): Promise<ExportResult> => ({ ok: true, outputs: [] }),
+    queueAdd: async () => [job('a', 1, 4)],
+    getSettings: async (): Promise<AppSettings> => ({}),
+    updateSettings: async () => {
+      order.push('save')
+      return {}
+    }
+  }
+  await queueAndRemember(api, req, remember, (jobs) => order.push(`queued ${jobs[0].id}`))
+  assert.deepEqual(order, ['queued a', 'save'])
+})

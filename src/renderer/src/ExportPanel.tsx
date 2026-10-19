@@ -157,12 +157,13 @@ export function ExportPanel({
     if (!req) return
     setQueueing(true)
     try {
-      const jobs = await queueAndRemember(window.api, req, settingsToRemember())
-      // The next job from this panel continues after these episodes.
-      const after = nextStartEpisode(startEpisode, segments.length)
-      const added = jobs[jobs.length - 1]
-      if (added) queuedSteps.current = [...queuedSteps.current, { jobId: added.id, before: startEpisode, after }]
-      setStartEpisode(after)
+      await queueAndRemember(window.api, req, settingsToRemember(), (jobs) => {
+        // The next job from this panel continues after these episodes.
+        const after = nextStartEpisode(startEpisode, segments.length)
+        const added = jobs[jobs.length - 1]
+        if (added) queuedSteps.current = [...queuedSteps.current, { jobId: added.id, before: startEpisode, after }]
+        setStartEpisode(after)
+      })
       setQueuedMsg(`Added “${showName.trim()}” (${segments.length} ep) to the queue`)
     } catch (e) {
       setQueuedMsg(`Could not add to the queue: ${e instanceof Error ? e.message : String(e)}`)
