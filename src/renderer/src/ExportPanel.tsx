@@ -91,14 +91,16 @@ export function ExportPanel({
   const queuedSteps = useRef<QueuedStep[]>([])
   const prevQueue = useRef(queue)
   useEffect(() => {
+    // During an export, keep the pre-export queue to compare with once it ends.
+    if (exporting) return
     const prev = prevQueue.current
     prevQueue.current = queue
-    if (exportingRef.current || queuedSteps.current.length === 0) return
+    if (queuedSteps.current.length === 0) return
     const next = reconcileQueuedStart(startEpisode, queuedSteps.current, prev, queue)
     queuedSteps.current = next.steps
     if (next.start !== startEpisode) setStartEpisode(next.start)
-    // Runs on queue changes only; startEpisode is read at that moment.
-  }, [queue])
+    // Runs on queue changes and when an export ends; startEpisode is read then.
+  }, [queue, exporting])
 
   const naming = { showName, season, startEpisode, outputDir: outputDir ?? '' }
   const canExport = !exporting && !queueing && showName.trim() !== '' && !!outputDir && segments.length > 0
