@@ -1,4 +1,4 @@
-import { runFfmpeg } from './ffmpeg'
+import { runFfmpeg, type FfmpegRun } from './ffmpeg'
 import { dvdInput } from './export'
 import type { FilmstripThumb, FrameResult, PreviewSource } from '../shared/types'
 
@@ -26,29 +26,67 @@ export function locateInFiles(
   return { fileIndex: durations.length - 1, localSec: 0 }
 }
 
-async function runCapture(args: string[]): Promise<Buffer> {
-  const { code, stdout, stderr } = await runFfmpeg(args).done
-  if (code === 0 && stdout.length > 0) return stdout
-  throw new Error(stderr.trim() || `ffmpeg exit ${code}`)
+const SUPERSEDED = 'Superseded by a newer preview request.'
+
+/**
+ * Lets a newer request stop the ffmpeg run of an older one, so fast
+ * scrubbing or switching programs never piles up decodes.
+ */
+class LatestOnly {
+  private gen = 0
+  private run: FfmpegRun | null = null
+
+  /** Start a new request (cancelling the old one); returns its "still current" check. */
+  begin(): () => boolean {
+    this.run?.kill()
+    this.run = null
+    const gen = ++this.gen
+    return () => gen === this.gen
+  }
+
+  async capture(args: string[], current: () => boolean): Promise<Buffer> {
+    if (!current()) throw new Error(SUPERSEDED)
+    const run = runFfmpeg(args)
+    this.run = run
+    try {
+      const { code, stdout, stderr } = await run.done
+      if (!current()) throw new Error(SUPERSEDED)
+      if (code === 0 && stdout.length > 0) return stdout
+      throw new Error(stderr.trim() || `ffmpeg exit ${code}`)
+    } finally {
+      if (this.run === run) this.run = null
+    }
+  }
 }
 
-/** Build ffmpeg args to grab one JPEG frame at `ss` from a single input. */
-function frameArgs(
+const frameRequests = new LatestOnly()
+const filmstripRequests = new LatestOnly()
+
+/**
+ * Build ffmpeg args to grab one JPEG frame at `ss` from a single input.
+ * `-ss` goes before `-i`: ffmpeg seeks to the keyframe before `ss`, then
+ * decodes and discards up to `ss` (accurate_seek is on by default), so the
+ * frame is exact without decoding from the start of the file.
+ */
+export function frameArgs(
   inputArgs: string[],
   input: string,
   ss: number,
-  accurate: boolean,
   height: number,
   correctAspect: boolean
 ): string[] {
   const vf = correctAspect
     ? `scale=ih*dar:ih,scale=-2:${height}:flags=bicubic`
     : `scale=-2:${height}:flags=bicubic`
-  const args = ['-hide_banner', '-v', 'error']
-  if (!accurate) args.push('-ss', ss.toFixed(3)) // fast input seek (keyframe)
-  args.push(...inputArgs, '-i', input)
-  if (accurate) args.push('-ss', ss.toFixed(3)) // accurate output seek (decode from start)
-  args.push(
+  return [
+    '-hide_banner',
+    '-v',
+    'error',
+    '-ss',
+    ss.toFixed(3),
+    ...inputArgs,
+    '-i',
+    input,
     '-frames:v',
     '1',
     '-an',
@@ -62,8 +100,7 @@ function frameArgs(
     '-vcodec',
     'mjpeg',
     'pipe:1'
-  )
-  return args
+  ]
 }
 
 function inputForSource(source: PreviewSource, t: number): { inputArgs: string[]; input: string; ss: number } {
@@ -75,17 +112,18 @@ function inputForSource(source: PreviewSource, t: number): { inputArgs: string[]
 }
 
 async function extractBuf(
+  requests: LatestOnly,
+  current: () => boolean,
   source: PreviewSource,
   t: number,
-  accurate: boolean,
   height: number
 ): Promise<Buffer> {
   const { inputArgs, input, ss } = inputForSource(source, t)
   try {
-    return await runCapture(frameArgs(inputArgs, input, ss, accurate, height, true))
+    return await requests.capture(frameArgs(inputArgs, input, ss, height, true), current)
   } catch {
     // Fallback: some inputs reject the display-aspect filter expression.
-    return await runCapture(frameArgs(inputArgs, input, ss, accurate, height, false))
+    return await requests.capture(frameArgs(inputArgs, input, ss, height, false), current)
   }
 }
 
@@ -93,36 +131,43 @@ function toDataUrl(buf: Buffer): string {
   return `data:image/jpeg;base64,${buf.toString('base64')}`
 }
 
-/** Extract a single preview frame at `timeSec`. */
-export async function extractFrame(
-  source: PreviewSource,
-  timeSec: number,
-  accurate: boolean
-): Promise<FrameResult> {
+/** Extract a single preview frame at `timeSec`. A newer call cancels this one. */
+export async function extractFrame(source: PreviewSource, timeSec: number): Promise<FrameResult> {
+  const current = frameRequests.begin()
   try {
-    const buf = await extractBuf(source, timeSec, accurate, PREVIEW_HEIGHT)
+    const buf = await extractBuf(frameRequests, current, source, timeSec, PREVIEW_HEIGHT)
     return { ok: true, dataUrl: toDataUrl(buf), timeSec }
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : String(e) }
   }
 }
 
-/** Generate evenly-spaced thumbnails across the program for the filmstrip. */
+/**
+ * Generate evenly-spaced thumbnails across the program for the filmstrip.
+ * A newer call (or cancelPreview) stops this one and returns what it has.
+ */
 export async function generateFilmstrip(
   source: PreviewSource,
   count: number
 ): Promise<FilmstripThumb[]> {
+  const current = filmstripRequests.begin()
   const dur = source.durationSec
   if (!dur || count <= 0) return []
   const thumbs: FilmstripThumb[] = []
-  for (let i = 0; i < count; i++) {
+  for (let i = 0; i < count && current(); i++) {
     const t = (dur * (i + 0.5)) / count
     try {
-      const buf = await extractBuf(source, t, false, THUMB_HEIGHT)
+      const buf = await extractBuf(filmstripRequests, current, source, t, THUMB_HEIGHT)
       thumbs.push({ timeSec: t, dataUrl: toDataUrl(buf) })
     } catch {
       /* skip frames that fail to extract */
     }
   }
-  return thumbs
+  return current() ? thumbs : []
+}
+
+/** Stop any running preview frame or filmstrip work (e.g. the preview closed). */
+export function cancelPreview(): void {
+  frameRequests.begin()
+  filmstripRequests.begin()
 }

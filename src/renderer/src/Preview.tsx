@@ -43,11 +43,11 @@ export function Preview({
   const segments = segmentsFromSplits(splitPoints, dur)
 
   const requestFrame = useCallback(
-    async (t: number, accurate: boolean) => {
+    async (t: number) => {
       const clamped = Math.max(0, Math.min(t, dur))
       const token = ++reqToken.current
       setLoading(true)
-      const res = await window.api.getFrame(source, clamped, accurate)
+      const res = await window.api.getFrame(source, clamped)
       if (token !== reqToken.current) return
       setLoading(false)
       if (res.ok) {
@@ -61,30 +61,42 @@ export function Preview({
   )
 
   useEffect(() => {
+    let active = true
     setTimeSec(0)
     setFrameUrl(null)
     setFilmstrip([])
-    void requestFrame(0, true)
-    window.api.getFilmstrip(source, FILMSTRIP_COUNT).then(setFilmstrip).catch(() => undefined)
+    void requestFrame(0)
+    window.api
+      .getFilmstrip(source, FILMSTRIP_COUNT)
+      .then((thumbs) => {
+        // Ignore a filmstrip that finishes after the program changed.
+        if (active) setFilmstrip(thumbs)
+      })
+      .catch(() => undefined)
+    return () => {
+      active = false
+      if (scrubTimer.current) clearTimeout(scrubTimer.current)
+      void window.api.cancelPreview()
+    }
   }, [source, requestFrame])
 
-  const scheduleFastFrame = (t: number): void => {
+  const scheduleFrame = (t: number): void => {
     if (scrubTimer.current) clearTimeout(scrubTimer.current)
-    scrubTimer.current = setTimeout(() => void requestFrame(t, false), SCRUB_DEBOUNCE_MS)
+    scrubTimer.current = setTimeout(() => void requestFrame(t), SCRUB_DEBOUNCE_MS)
   }
 
   const goTo = useCallback(
     (t: number) => {
       const clamped = Math.max(0, Math.min(t, dur))
       setTimeSec(clamped)
-      void requestFrame(clamped, true)
+      void requestFrame(clamped)
     },
     [dur, requestFrame]
   )
 
   const onScrub = (value: number): void => {
     setTimeSec(value)
-    scheduleFastFrame(value)
+    scheduleFrame(value)
   }
 
   const step = (deltaSec: number): void => goTo(timeSec + deltaSec)
@@ -177,8 +189,6 @@ export function Preview({
         step={Math.max(0.01, 1 / fps)}
         value={timeSec}
         onChange={(e) => onScrub(Number(e.target.value))}
-        onMouseUp={() => requestFrame(timeSec, true)}
-        onKeyUp={() => requestFrame(timeSec, true)}
       />
 
       {filmstrip.length > 0 && (
@@ -203,7 +213,7 @@ export function Preview({
         onSeek={(t) => goTo(t)}
         onDragSplit={(_i, t) => {
           setTimeSec(t)
-          scheduleFastFrame(t)
+          scheduleFrame(t)
         }}
         onCommitSplit={(i, t) => {
           setSplit(i, t)

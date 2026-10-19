@@ -34,11 +34,13 @@ const api = {
   inspect: (paths: string[]): Promise<InspectResponse> =>
     ipcRenderer.invoke('input:inspect', paths),
   /** Extract one preview frame at a timeline position (seconds). */
-  getFrame: (source: PreviewSource, timeSec: number, accurate: boolean): Promise<FrameResult> =>
-    ipcRenderer.invoke('preview:frame', source, timeSec, accurate),
+  getFrame: (source: PreviewSource, timeSec: number): Promise<FrameResult> =>
+    ipcRenderer.invoke('preview:frame', source, timeSec),
   /** Generate `count` evenly-spaced filmstrip thumbnails for the program. */
   getFilmstrip: (source: PreviewSource, count: number): Promise<FilmstripThumb[]> =>
     ipcRenderer.invoke('preview:filmstrip', source, count),
+  /** Stop running frame/filmstrip extraction. */
+  cancelPreview: (): Promise<void> => ipcRenderer.invoke('preview:cancel'),
   /** Pick an output directory; returns the path or null if cancelled. */
   chooseOutputDir: (): Promise<string | null> => ipcRenderer.invoke('dialog:chooseOutputDir'),
   /** Run an export of all episode segments; resolves when finished. */
