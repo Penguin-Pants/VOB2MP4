@@ -1,5 +1,4 @@
-import { spawn, type ChildProcess } from 'child_process'
-import { binaryPath } from './ffmpeg'
+import { runFfmpeg, type FfmpegRun } from './ffmpeg'
 import { resolveInput } from './export'
 import type { PreviewSource } from '../shared/types'
 
@@ -33,14 +32,7 @@ export function candidateSplitsFromBlack(
     .filter((t) => t > edgeGuardSec && t < duration - edgeGuardSec)
 }
 
-/** Parse an ffmpeg `-progress` out_time line into seconds. */
-function parseOutTime(line: string): number | null {
-  const m = /out_time=(\d+):(\d+):(\d+(?:\.\d+)?)/.exec(line)
-  if (!m) return null
-  return Number(m[1]) * 3600 + Number(m[2]) * 60 + Number(m[3])
-}
-
-let currentScan: ChildProcess | null = null
+let currentScan: FfmpegRun | null = null
 
 /** Cancel an in-progress scan, if any. */
 export function cancelScan(): void {
@@ -78,30 +70,19 @@ export async function scanBlackFrames(
     '-'
   ]
 
-  return new Promise<number[]>((resolve) => {
-    const proc = spawn(binaryPath('ffmpeg'), args)
-    currentScan = proc
-    let stderr = ''
-    let stdout = ''
-    proc.stderr.on('data', (d: Buffer) => {
-      stderr += d.toString()
-    })
-    proc.stdout.on('data', (d: Buffer) => {
-      stdout += d.toString()
-      let nl: number
-      while ((nl = stdout.indexOf('\n')) >= 0) {
-        const line = stdout.slice(0, nl)
-        stdout = stdout.slice(nl + 1)
-        const t = parseOutTime(line)
-        if (t != null && source.durationSec > 0) onProgress(Math.min(1, t / source.durationSec))
-      }
-    })
-    const finish = (): void => {
-      currentScan = null
-      void cleanup()
-      resolve(candidateSplitsFromBlack(parseBlackIntervals(stderr), source.durationSec))
-    }
-    proc.on('error', finish)
-    proc.on('close', finish)
+  const run = runFfmpeg(args, (t) => {
+    if (source.durationSec > 0) onProgress(Math.min(1, t / source.durationSec))
   })
+  currentScan = run
+  try {
+    const { stderr } = await run.done
+    return candidateSplitsFromBlack(parseBlackIntervals(stderr), source.durationSec)
+  } catch {
+    return []
+  } finally {
+    if (currentScan === run) currentScan = null
+    // The temp concat list is disposable: a failed delete must not turn the
+    // scan result into a rejection (the UI would stay in "Scanning…").
+    await cleanup().catch(() => undefined)
+  }
 }

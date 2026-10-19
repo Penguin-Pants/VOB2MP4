@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { addJob, clearFinished, listJobs, removeJob, runQueue } from './queue'
+import { addJob, clearFinished, listJobs, removeJob, runQueue, stopQueue } from './queue'
 import type { ExportRequest, ExportResult } from '../shared/types'
 
 function request(label: string): ExportRequest {
@@ -89,4 +89,19 @@ test('removeJob keeps a running job', async () => {
     return { ok: true, outputs: [] }
   })
   assert.deepEqual(statuses(), [['A', 'done']])
+})
+
+test('stopQueue cancels the running job and leaves later jobs queued', async () => {
+  resetQueue()
+  addJob(request('A'))
+  addJob(request('B'))
+  await runQueue(async (_req, _onProgress, signal): Promise<ExportResult> => {
+    stopQueue()
+    assert.equal(signal?.aborted, true)
+    return { ok: false, outputs: [], error: 'Export cancelled.' }
+  })
+  assert.deepEqual(statuses(), [
+    ['A', 'error'],
+    ['B', 'queued']
+  ])
 })

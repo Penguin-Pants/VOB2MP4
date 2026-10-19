@@ -1,16 +1,19 @@
 import { app } from 'electron'
 import { join } from 'path'
 import { readFileSync, writeFileSync } from 'fs'
-import type { AppSettings, LastExportSettings, SettingsPatch } from '../shared/types'
+import { nextStartEpisode } from '../shared/naming'
+import type { AppSettings, LastExportSettings, NamingOptions, SettingsPatch } from '../shared/types'
 
 /** Merge a settings patch, deep-merging `lastExport`. Pure. */
 export function mergeSettings(current: AppSettings, patch: SettingsPatch): AppSettings {
-  return {
-    ...current,
-    lastExport: patch.lastExport
-      ? ({ ...current.lastExport, ...patch.lastExport } as LastExportSettings)
-      : current.lastExport
+  const prev = current.lastExport
+  const lastExport = patch.lastExport ? ({ ...prev, ...patch.lastExport } as LastExportSettings) : prev
+  // For the same show and season the saved start only moves forward, so a
+  // stale patch (read before a queue job finished) cannot undo its progress.
+  if (prev && lastExport && lastExport !== prev && prev.showName === lastExport.showName && prev.season === lastExport.season) {
+    lastExport.startEpisode = Math.max(prev.startEpisode, lastExport.startEpisode)
   }
+  return { ...current, lastExport }
 }
 
 function settingsPath(): string {
@@ -33,4 +36,25 @@ export function updateSettings(patch: SettingsPatch): AppSettings {
     /* best-effort persistence */
   }
   return next
+}
+
+/**
+ * The settings patch after a job finished: move the saved start episode past
+ * its episodes (same show and season only, never backwards). Pure.
+ */
+export function afterCompletedExport(
+  current: AppSettings,
+  naming: NamingOptions,
+  episodeCount: number
+): SettingsPatch {
+  const last = current.lastExport
+  if (!last || last.showName !== naming.showName || last.season !== naming.season) return {}
+  const next = nextStartEpisode(naming.startEpisode, episodeCount)
+  return next > last.startEpisode ? { lastExport: { startEpisode: next } } : {}
+}
+
+/** Save the numbers a finished queue job used (see afterCompletedExport). */
+export function rememberCompletedExport(naming: NamingOptions, episodeCount: number): void {
+  const patch = afterCompletedExport(getSettings(), naming, episodeCount)
+  if (patch.lastExport) updateSettings(patch)
 }

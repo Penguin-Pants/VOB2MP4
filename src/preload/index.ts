@@ -43,6 +43,8 @@ const api = {
   chooseOutputDir: (): Promise<string | null> => ipcRenderer.invoke('dialog:chooseOutputDir'),
   /** Run an export of all episode segments; resolves when finished. */
   runExport: (req: ExportRequest): Promise<ExportResult> => ipcRenderer.invoke('export:run', req),
+  /** Cancel the running export; the current episode file is removed. */
+  cancelExport: (): Promise<void> => ipcRenderer.invoke('export:cancel'),
   /** Subscribe to export progress events. Returns an unsubscribe function. */
   onExportProgress: (cb: (p: ExportProgress) => void): (() => void) => {
     const listener = (_e: unknown, p: ExportProgress): void => cb(p)
@@ -59,6 +61,8 @@ const api = {
   queueList: (): Promise<QueueJobView[]> => ipcRenderer.invoke('queue:list'),
   /** Start processing the queue (unattended); returns the current snapshot. */
   queueRun: (): Promise<QueueJobView[]> => ipcRenderer.invoke('queue:run'),
+  /** Cancel the running job and stop the queue; later jobs stay queued. */
+  queueStop: (): Promise<QueueJobView[]> => ipcRenderer.invoke('queue:stop'),
   /** Subscribe to queue updates. Returns an unsubscribe function. */
   onQueueUpdate: (cb: (jobs: QueueJobView[]) => void): (() => void) => {
     const listener = (_e: unknown, jobs: QueueJobView[]): void => cb(jobs)

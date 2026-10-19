@@ -10,6 +10,7 @@ import { InputView } from './InputView'
 import { Preview } from './Preview'
 import { QueueView } from './QueueView'
 import type { ExportInitial } from './ExportPanel'
+import { nextFreeEpisode } from './exportFlow'
 
 function initialFromSettings(le: LastExportSettings | undefined): ExportInitial | undefined {
   if (!le) return undefined
@@ -42,7 +43,11 @@ export default function App(): JSX.Element {
   async function loadSource(src: PreviewSource): Promise<void> {
     // Pre-fill export options from the most recently used settings.
     const settings = await window.api.getSettings().catch((): AppSettings => ({}))
-    setExportInitial(initialFromSettings(settings.lastExport))
+    const jobs = await window.api.queueList().catch((): QueueJobView[] => [])
+    const initial = initialFromSettings(settings.lastExport)
+    // Start after the episodes already queued for this show and season.
+    const startEpisode = nextFreeEpisode(settings.lastExport, jobs)
+    setExportInitial(initial && startEpisode != null ? { ...initial, startEpisode } : initial)
     setSplitPoints([])
     setLoadNonce((n) => n + 1)
     setSource(src)
@@ -118,10 +123,12 @@ export default function App(): JSX.Element {
       </header>
 
       <main className="app__main">
-        {showQueue ? (
-          <QueueView jobs={queue} onBack={() => setShowQueue(false)} />
-        ) : source ? (
+        {showQueue && <QueueView jobs={queue} onBack={() => setShowQueue(false)} />}
+        {source ? (
+          // Kept mounted (only hidden) while the queue shows, so a running
+          // export keeps its progress and Cancel button.
           <Preview
+            hidden={showQueue}
             source={source}
             onBack={() => setSource(null)}
             splitPoints={splitPoints}
@@ -129,7 +136,7 @@ export default function App(): JSX.Element {
             exportInitial={exportInitial}
             exportKey={`${source.kind}:${source.label}:${source.durationSec}:${loadNonce}`}
           />
-        ) : (
+        ) : !showQueue ? (
           <>
             <section className="toolbar">
               <button onClick={() => open('folder')} disabled={busy}>
@@ -164,7 +171,7 @@ export default function App(): JSX.Element {
               </section>
             )}
           </>
-        )}
+        ) : null}
       </main>
 
       <footer className="app__footer muted small">

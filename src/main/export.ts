@@ -1,8 +1,7 @@
-import { spawn } from 'child_process'
-import { mkdir, writeFile, rm } from 'fs/promises'
+import { mkdir, rename, rm, stat, writeFile } from 'fs/promises'
 import { join, dirname } from 'path'
 import { tmpdir } from 'os'
-import { binaryPath } from './ffmpeg'
+import { runFfmpeg } from './ffmpeg'
 import { buildExportArgs } from './exportArgs'
 import { segmentsFromSplits } from '../shared/segments'
 import { episodeFileName, seasonFolderName } from '../shared/naming'
@@ -13,16 +12,23 @@ function concatLine(file: string): string {
   return `file '${file.replace(/'/g, "'\\''")}'`
 }
 
+/** ffmpeg input args + target for a DVD title (disc root = parent of VIDEO_TS). */
+export function dvdInput(source: Extract<PreviewSource, { kind: 'dvd' }>): {
+  inputArgs: string[]
+  input: string
+} {
+  return {
+    inputArgs: ['-f', 'dvdvideo', '-title', String(source.title)],
+    input: dirname(source.videoTsPath)
+  }
+}
+
 /** Resolve the ffmpeg input args + target for a source, writing a temp list if needed. */
 export async function resolveInput(
   source: PreviewSource
 ): Promise<{ inputArgs: string[]; input: string; cleanup: () => Promise<void> }> {
   if (source.kind === 'dvd') {
-    return {
-      inputArgs: ['-f', 'dvdvideo', '-title', String(source.title)],
-      input: dirname(source.videoTsPath),
-      cleanup: async () => undefined
-    }
+    return { ...dvdInput(source), cleanup: async () => undefined }
   }
   // Single-file program: use the file directly. The concat demuxer mishandles
   // input seeking far from a keyframe (it drops the video stream), which is
@@ -40,49 +46,114 @@ export async function resolveInput(
   }
 }
 
-/** Parse an ffmpeg `out_time=HH:MM:SS.micros` value into seconds. */
-function parseOutTime(line: string): number | null {
-  const m = /out_time=(\d+):(\d+):(\d+(?:\.\d+)?)/.exec(line)
-  if (!m) return null
-  return Number(m[1]) * 3600 + Number(m[2]) * 60 + Number(m[3])
+const CANCELLED = 'Export cancelled.'
+
+/** Episode files reserved by exports running in this process (by reservationKey). */
+const liveReservations = new Set<string>()
+
+/**
+ * The key a reserved path is tracked under. Windows file names are
+ * case-insensitive, so "Show" and "show" are the same file there.
+ */
+export function reservationKey(path: string, platform: NodeJS.Platform = process.platform): string {
+  return platform === 'win32' ? path.toLowerCase() : path
 }
 
-function runOne(
+/**
+ * Reserve an episode file as an empty placeholder ('wx' fails if it exists).
+ * An empty file that no running export owns is a placeholder left by an
+ * interrupted run (crash or kill), never a real episode, so it is reused.
+ */
+async function reserve(output: string): Promise<void> {
+  // Claim the key before any await, so two exports in this process can never
+  // both pass the checks below for the same file.
+  const key = reservationKey(output)
+  if (liveReservations.has(key)) throw Object.assign(new Error('reserved'), { code: 'EEXIST' })
+  liveReservations.add(key)
+  try {
+    await writeFile(output, '', { flag: 'wx' })
+  } catch (e) {
+    const stale = (e as NodeJS.ErrnoException).code === 'EEXIST' && (await stat(output).catch(() => null))?.size === 0
+    if (!stale) {
+      liveReservations.delete(key)
+      throw e
+    }
+  }
+}
+
+/** Where ffmpeg writes an episode until it is complete (see runExport). */
+function partPath(output: string): string {
+  return `${output}.part`
+}
+
+/**
+ * Rename a finished .part file to its episode name. On Windows a media
+ * server or virus scanner can briefly hold the new placeholder open, and
+ * rename then fails with EPERM, EACCES or EBUSY: retry before giving up, as
+ * a failure here deletes the finished encode.
+ */
+async function publish(from: string, to: string, attempts = 5): Promise<void> {
+  for (let i = 0; ; i++) {
+    try {
+      return await rename(from, to)
+    } catch (e) {
+      const code = (e as NodeJS.ErrnoException).code
+      const locked = code === 'EPERM' || code === 'EACCES' || code === 'EBUSY'
+      if (!locked || i >= attempts - 1) throw e
+      await new Promise((r) => setTimeout(r, 200 * (i + 1)))
+    }
+  }
+}
+
+async function runOne(
   args: string[],
   durationSec: number,
-  onFraction: (f: number) => void
+  onFraction: (f: number) => void,
+  signal?: AbortSignal
 ): Promise<void> {
-  return new Promise((resolve, reject) => {
-    const proc = spawn(binaryPath('ffmpeg'), args)
-    let stdoutBuf = ''
-    const errBuf: Buffer[] = []
-    proc.stdout.on('data', (d: Buffer) => {
-      stdoutBuf += d.toString()
-      let nl: number
-      while ((nl = stdoutBuf.indexOf('\n')) >= 0) {
-        const line = stdoutBuf.slice(0, nl)
-        stdoutBuf = stdoutBuf.slice(nl + 1)
-        const t = parseOutTime(line)
-        if (t != null && durationSec > 0) onFraction(Math.min(1, t / durationSec))
-      }
-    })
-    proc.stderr.on('data', (d: Buffer) => errBuf.push(d))
-    proc.on('error', reject)
-    proc.on('close', (code) => {
-      if (code === 0) resolve()
-      else reject(new Error(Buffer.concat(errBuf).toString().trim() || `ffmpeg exit ${code}`))
-    })
+  const run = runFfmpeg(args, (t) => {
+    if (durationSec > 0) onFraction(Math.min(1, t / durationSec))
   })
+  const abort = (): void => run.kill()
+  signal?.addEventListener('abort', abort)
+  if (signal?.aborted) run.kill()
+  try {
+    const { code, stderr } = await run.done
+    // A run that finished before the abort landed keeps its episode.
+    if (code !== 0) throw new Error(signal?.aborted ? CANCELLED : stderr.trim() || `ffmpeg exit ${code}`)
+  } finally {
+    signal?.removeEventListener('abort', abort)
+  }
 }
 
 /**
  * Export every episode segment of one program to MP4, sequentially.
  * Calls `onProgress` with per-episode progress. Original inputs are never
- * modified. Returns the list of written files.
+ * modified. Returns the list of written files. Aborting `signal` stops the
+ * running episode and skips the rest; unfinished episode files are removed.
  */
-export async function runExport(
+export function runExport(
   req: ExportRequest,
-  onProgress: (p: ExportProgress) => void
+  onProgress: (p: ExportProgress) => void,
+  signal?: AbortSignal
+): Promise<ExportResult> {
+  const run = exportProgram(req, onProgress, signal)
+  activeExports.add(run)
+  void run.finally(() => activeExports.delete(run))
+  return run
+}
+
+const activeExports = new Set<Promise<ExportResult>>()
+
+/** Resolves once every running export has finished, including its file cleanup. */
+export async function waitForExports(): Promise<void> {
+  await Promise.allSettled([...activeExports])
+}
+
+async function exportProgram(
+  req: ExportRequest,
+  onProgress: (p: ExportProgress) => void,
+  signal?: AbortSignal
 ): Promise<ExportResult> {
   const { source, splitPoints, options, naming } = req
   const segments = segmentsFromSplits(splitPoints, source.durationSec)
@@ -90,6 +161,7 @@ export async function runExport(
 
   const seasonDir = join(naming.outputDir, seasonFolderName(naming.season))
   const outputs: string[] = []
+  const reserved: string[] = []
   let cleanup = async (): Promise<void> => undefined
 
   // Always resolve with a result: a rejection would leave the UI and the
@@ -99,16 +171,39 @@ export async function runExport(
     cleanup = resolved.cleanup
     const { inputArgs, input } = resolved
     await mkdir(seasonDir, { recursive: true })
-    for (let i = 0; i < segments.length; i++) {
-      const seg = segments[i]
-      const name = episodeFileName(naming, i)
+    // Never overwrite earlier work (e.g. the previous disc of the season).
+    // Reserve every episode up front ('wx' fails if the file exists), so a
+    // clash, also with a concurrent export, is found before any encoding.
+    // ffmpeg's -y then only overwrites these placeholders.
+    const names = segments.map((_, i) => episodeFileName(naming, i))
+    for (const name of names) {
       const output = join(seasonDir, name)
+      try {
+        await reserve(output)
+      } catch (e) {
+        if ((e as NodeJS.ErrnoException).code !== 'EEXIST') throw e
+        return {
+          ok: false,
+          outputs,
+          error: `${name} already exists in ${seasonDir}. Change the start episode or move the file.`
+        }
+      }
+      reserved.push(output)
+    }
+    for (let i = 0; i < segments.length; i++) {
+      if (signal?.aborted) return { ok: false, outputs, error: CANCELLED }
+      const seg = segments[i]
+      const name = names[i]
+      const output = reserved[i]
+      // Encode to a .part file and rename it when done: a crash or power loss
+      // then leaves only the empty placeholder (reclaimed next time) and a
+      // .part file, never a truncated episode under its real name.
       const args = buildExportArgs({
         inputArgs,
         input,
         startSec: seg.startSec,
         endSec: seg.endSec,
-        output,
+        output: partPath(output),
         options
       })
       onProgress({
@@ -126,7 +221,8 @@ export async function runExport(
             episodeName: name,
             fraction,
             status: 'running'
-          })
+          }),
+          signal
         )
       } catch (e) {
         const error = e instanceof Error ? e.message : String(e)
@@ -138,8 +234,10 @@ export async function runExport(
           status: 'error',
           error
         })
+        if (signal?.aborted) return { ok: false, outputs, error: CANCELLED }
         return { ok: false, outputs, error: `Episode ${i + 1} (${name}) failed: ${error}` }
       }
+      await publish(partPath(output), output)
       outputs.push(output)
       onProgress({
         episodeIndex: i,
@@ -152,6 +250,14 @@ export async function runExport(
   } catch (e) {
     return { ok: false, outputs, error: e instanceof Error ? e.message : String(e) }
   } finally {
+    // Remove every reserved episode that did not finish (failure, clash,
+    // cancel or an early error), so no empty or truncated file is left for
+    // a media server to index or to block the next export.
+    for (const path of reserved) {
+      await rm(partPath(path), { force: true }).catch(() => undefined)
+      if (!outputs.includes(path)) await rm(path, { force: true }).catch(() => undefined)
+      liveReservations.delete(reservationKey(path))
+    }
     // The temp concat list is disposable: failing to delete it must not
     // turn a finished export into a rejection.
     await cleanup().catch(() => undefined)

@@ -37,6 +37,8 @@ export function buildExportArgs(p: BuildExportArgsParams): string[] {
   const { inputArgs, input, startSec, endSec, output, options } = p
   const duration = Math.max(0, endSec - startSec)
 
+  // -y: the caller reserves `output` as an empty placeholder first, so this
+  // only ever replaces that placeholder.
   const args = ['-hide_banner', '-v', 'error', '-y', '-progress', 'pipe:1', '-nostats']
   args.push('-ss', startSec.toFixed(3))
   args.push(...inputArgs, '-i', input)
@@ -76,6 +78,7 @@ export function buildExportArgs(p: BuildExportArgsParams): string[] {
 
   // Don't carry the source's chapter markers into each episode.
   args.push('-map_chapters', '-1')
-  args.push('-movflags', '+faststart', output)
+  // -f mp4: the output may be a .part file, so the format cannot come from its name.
+  args.push('-movflags', '+faststart', '-f', 'mp4', output)
   return args
 }

@@ -1,6 +1,13 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { parseBlackIntervals, candidateSplitsFromBlack } from './scan'
+import { mock } from 'node:test'
+import { createRequire } from 'module'
+import { mkdtemp, rm } from 'fs/promises'
+import { join } from 'path'
+import { tmpdir } from 'os'
+import { execFileSync } from 'child_process'
+import { parseBlackIntervals, candidateSplitsFromBlack, scanBlackFrames } from './scan'
+import { binariesPresent, binaryPath } from './ffmpeg'
 
 const sampleLog = `
 frame=  100 fps=0.0 q=-0.0 size=N/A time=00:00:04.00 bitrate=N/A
@@ -34,3 +41,35 @@ test('candidateSplitsFromBlack drops runs near the end', () => {
 test('parseBlackIntervals handles empty input', () => {
   assert.deepEqual(parseBlackIntervals(''), [])
 })
+
+test(
+  'scanBlackFrames still resolves when the temp concat list cannot be deleted',
+  { skip: !binariesPresent() && 'ffmpeg not fetched (npm run fetch-ffmpeg)' },
+  async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'vob2mp4-test-'))
+    const fsp = createRequire(__filename)('fs/promises') as typeof import('fs/promises')
+    try {
+      const files = ['a.mkv', 'b.mkv'].map((name) => {
+        const file = join(dir, name)
+        execFileSync(binaryPath('ffmpeg'), [
+          '-v', 'error', '-f', 'lavfi', '-i', 'testsrc=d=1:s=64x48:r=25', '-c:v', 'ffv1', file
+        ])
+        return file
+      })
+      // Deleting the list fails (e.g. a virus scanner holds it on Windows).
+      const rmMock = mock.method(fsp, 'rm', async () => {
+        throw new Error('EBUSY: resource busy or locked')
+      })
+      const res = await scanBlackFrames(
+        { kind: 'files', label: 'x', durationSec: 2, frameRate: 25, streams: [], files, fileDurations: [1, 1] },
+        0.4,
+        () => undefined
+      )
+      assert.ok(rmMock.mock.calls.some((c) => String(c.arguments[0]).includes('vob2mp4-concat-')))
+      assert.ok(Array.isArray(res))
+    } finally {
+      mock.restoreAll()
+      await rm(dir, { recursive: true, force: true })
+    }
+  }
+)

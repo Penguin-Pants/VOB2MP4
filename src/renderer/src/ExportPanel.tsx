@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type {
   ConvertMode,
   ExportProgress,
@@ -7,10 +7,12 @@ import type {
   MediaStreamInfo,
   PreviewSource,
   ProjectFile,
-  QualityPreset
+  QualityPreset,
+  SettingsPatch
 } from '../../shared/types'
 import { segmentsFromSplits } from '../../shared/segments'
-import { episodeFileName, seasonFolderName } from '../../shared/naming'
+import { exportAndRemember, queueAndRemember } from './exportFlow'
+import { episodeFileName, nextStartEpisode, seasonFolderName } from '../../shared/naming'
 
 /** Initial export config (from remembered settings or a loaded project). */
 export interface ExportInitial {
@@ -66,12 +68,23 @@ export function ExportPanel({
   const [burnSub, setBurnSub] = useState<number | null>(initial?.burnSub ?? null)
 
   const [exporting, setExporting] = useState(false)
+  const [queueing, setQueueing] = useState(false)
   const [progress, setProgress] = useState<ExportProgress | null>(null)
   const [result, setResult] = useState<ExportResult | null>(null)
   const [queuedMsg, setQueuedMsg] = useState<string | null>(null)
 
+  // Leaving the program (Back) ends its export, as it ends its scan: no
+  // panel would be left to show the progress or to cancel it.
+  const exportingRef = useRef(false)
+  useEffect(
+    () => () => {
+      if (exportingRef.current) void window.api.cancelExport()
+    },
+    []
+  )
+
   const naming = { showName, season, startEpisode, outputDir: outputDir ?? '' }
-  const canExport = !exporting && showName.trim() !== '' && !!outputDir && segments.length > 0
+  const canExport = !exporting && !queueing && showName.trim() !== '' && !!outputDir && segments.length > 0
 
   function buildRequest(): ExportRequest | null {
     if (!outputDir) return null
@@ -89,17 +102,19 @@ export function ExportPanel({
     }
   }
 
-  function persistSettings(): void {
-    void window.api.updateSettings({
+  function settingsToRemember(): SettingsPatch {
+    return {
       lastExport: {
         mode,
         preset,
         outputDir: outputDir ?? '',
         showName: showName.trim(),
         season,
-        startEpisode
+        // Pre-fill the next disc with the following episode number, so it
+        // doesn't clash with the episodes of this one.
+        startEpisode: nextStartEpisode(startEpisode, segments.length)
       }
-    })
+    }
   }
 
   function currentProject(): ProjectFile {
@@ -121,9 +136,17 @@ export function ExportPanel({
   async function addToQueue(): Promise<void> {
     const req = buildRequest()
     if (!req) return
-    persistSettings()
-    await window.api.queueAdd(req)
-    setQueuedMsg(`Added “${showName.trim()}” (${segments.length} ep) to the queue`)
+    setQueueing(true)
+    try {
+      await queueAndRemember(window.api, req, settingsToRemember())
+      // The next job from this panel continues after these episodes.
+      setStartEpisode(nextStartEpisode(startEpisode, segments.length))
+      setQueuedMsg(`Added “${showName.trim()}” (${segments.length} ep) to the queue`)
+    } catch (e) {
+      setQueuedMsg(`Could not add to the queue: ${e instanceof Error ? e.message : String(e)}`)
+    } finally {
+      setQueueing(false)
+    }
   }
 
   async function onSaveProject(): Promise<void> {
@@ -146,16 +169,20 @@ export function ExportPanel({
   async function doExport(): Promise<void> {
     const req = buildRequest()
     if (!req) return
+    exportingRef.current = true
     setExporting(true)
     setResult(null)
     setProgress(null)
-    persistSettings()
     const unsub = window.api.onExportProgress(setProgress)
     try {
-      setResult(await window.api.runExport(req))
+      const res = await exportAndRemember(window.api, req, settingsToRemember())
+      // A second export from this panel continues after the episodes written.
+      if (res.outputs.length > 0) setStartEpisode(nextStartEpisode(startEpisode, res.outputs.length))
+      setResult(res)
     } catch (e) {
       setResult({ ok: false, outputs: [], error: e instanceof Error ? e.message : String(e) })
     } finally {
+      exportingRef.current = false
       unsub()
       setExporting(false)
       setProgress(null)
@@ -288,6 +315,11 @@ export function ExportPanel({
         <button onClick={doExport} disabled={!canExport}>
           {exporting ? 'Exporting…' : `Export now (${segments.length})`}
         </button>
+        {exporting && (
+          <button className="ghost" onClick={() => void window.api.cancelExport()}>
+            Cancel
+          </button>
+        )}
         <button className="ghost" onClick={addToQueue} disabled={!canExport}>
           ＋ Add to queue
         </button>

@@ -1,6 +1,5 @@
-import { spawn } from 'child_process'
-import { dirname } from 'path'
-import { binaryPath } from './ffmpeg'
+import { runFfmpeg } from './ffmpeg'
+import { dvdInput } from './export'
 import type { FilmstripThumb, FrameResult, PreviewSource } from '../shared/types'
 
 const PREVIEW_HEIGHT = 480
@@ -27,20 +26,10 @@ export function locateInFiles(
   return { fileIndex: durations.length - 1, localSec: 0 }
 }
 
-function runCapture(bin: string, args: string[]): Promise<Buffer> {
-  return new Promise((resolve, reject) => {
-    const out: Buffer[] = []
-    const err: Buffer[] = []
-    const proc = spawn(bin, args)
-    proc.stdout.on('data', (d: Buffer) => out.push(d))
-    proc.stderr.on('data', (d: Buffer) => err.push(d))
-    proc.on('error', reject)
-    proc.on('close', (code) => {
-      const buf = Buffer.concat(out)
-      if (code === 0 && buf.length > 0) resolve(buf)
-      else reject(new Error(Buffer.concat(err).toString().trim() || `ffmpeg exit ${code}`))
-    })
-  })
+async function runCapture(args: string[]): Promise<Buffer> {
+  const { code, stdout, stderr } = await runFfmpeg(args).done
+  if (code === 0 && stdout.length > 0) return stdout
+  throw new Error(stderr.trim() || `ffmpeg exit ${code}`)
 }
 
 /** Build ffmpeg args to grab one JPEG frame at `ss` from a single input. */
@@ -82,12 +71,7 @@ function inputForSource(source: PreviewSource, t: number): { inputArgs: string[]
     const { fileIndex, localSec } = locateInFiles(source.fileDurations, t)
     return { inputArgs: [], input: source.files[fileIndex], ss: localSec }
   }
-  // dvd: seek within the title via the dvdvideo demuxer (disc root = parent of VIDEO_TS)
-  return {
-    inputArgs: ['-f', 'dvdvideo', '-title', String(source.title)],
-    input: dirname(source.videoTsPath),
-    ss: t
-  }
+  return { ...dvdInput(source), ss: t }
 }
 
 async function extractBuf(
@@ -97,12 +81,11 @@ async function extractBuf(
   height: number
 ): Promise<Buffer> {
   const { inputArgs, input, ss } = inputForSource(source, t)
-  const bin = binaryPath('ffmpeg')
   try {
-    return await runCapture(bin, frameArgs(inputArgs, input, ss, accurate, height, true))
+    return await runCapture(frameArgs(inputArgs, input, ss, accurate, height, true))
   } catch {
     // Fallback: some inputs reject the display-aspect filter expression.
-    return await runCapture(bin, frameArgs(inputArgs, input, ss, accurate, height, false))
+    return await runCapture(frameArgs(inputArgs, input, ss, accurate, height, false))
   }
 }
 

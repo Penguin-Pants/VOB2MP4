@@ -1,11 +1,12 @@
 import { app, shell, BrowserWindow, ipcMain, dialog } from 'electron'
 import { join } from 'path'
-import { ffmpegVersion, binariesPresent } from './ffmpeg'
+import { ffmpegVersion, binariesPresent, killAllFfmpeg } from './ffmpeg'
 import { inspectPaths } from './inspect'
+import { MEDIA_EXTENSIONS } from './input'
 import { extractFrame, generateFilmstrip } from './preview'
-import { runExport } from './export'
-import { addJob, clearFinished, listJobs, removeJob, runQueue } from './queue'
-import { getSettings, updateSettings } from './settings'
+import { runExport, waitForExports } from './export'
+import { addJob, clearFinished, listJobs, removeJob, runQueue, stopQueue } from './queue'
+import { getSettings, rememberCompletedExport, updateSettings } from './settings'
 import { openProject, saveProject } from './project'
 import { cancelScan, scanBlackFrames } from './scan'
 import type {
@@ -89,7 +90,7 @@ ipcMain.handle('dialog:openMediaFiles', async (): Promise<string[]> => {
     title: 'Select one or more video files (each is its own disc)',
     properties: ['openFile', 'multiSelections'],
     filters: [
-      { name: 'Video files', extensions: ['m4v', 'mp4', 'mkv', 'mov', 'avi', 'm2ts', 'mts', 'ts', 'mpg', 'mpeg', 'wmv', 'webm'] },
+      { name: 'Video files', extensions: [...MEDIA_EXTENSIONS] },
       { name: 'All files', extensions: ['*'] }
     ]
   })
@@ -130,9 +131,19 @@ ipcMain.handle('dialog:chooseOutputDir', async (): Promise<string | null> => {
 })
 
 // IPC: run an export, streaming progress back to the requesting window.
-ipcMain.handle('export:run', (e, req: ExportRequest): Promise<ExportResult> => {
-  return runExport(req, (p) => e.sender.send('export:progress', p))
+let exportAbort: AbortController | null = null
+ipcMain.handle('export:run', async (e, req: ExportRequest): Promise<ExportResult> => {
+  // One direct export at a time, so Cancel always reaches the running one.
+  if (exportAbort) return { ok: false, outputs: [], error: 'An export is already running.' }
+  const abort = new AbortController()
+  exportAbort = abort
+  try {
+    return await runExport(req, (p) => e.sender.send('export:progress', p), abort.signal)
+  } finally {
+    if (exportAbort === abort) exportAbort = null
+  }
 })
+ipcMain.handle('export:cancel', (): void => exportAbort?.abort())
 
 // IPC: batch queue management (updates broadcast via 'queue:update').
 ipcMain.handle('queue:add', (_e, req: ExportRequest): QueueJobView[] => addJob(req))
@@ -140,9 +151,17 @@ ipcMain.handle('queue:remove', (_e, id: string): QueueJobView[] => removeJob(id)
 ipcMain.handle('queue:clear', (): QueueJobView[] => clearFinished())
 ipcMain.handle('queue:list', (): QueueJobView[] => listJobs())
 ipcMain.handle('queue:run', (): QueueJobView[] => {
-  void runQueue()
+  // Save a job's episode numbers only once it finished: the queue lives in
+  // memory, so numbers of jobs that never ran must not be used up.
+  void runQueue(async (req, onProgress, signal) => {
+    const res = await runExport(req, onProgress, signal)
+    // Also after a partial failure: written episodes stay on disk.
+    if (res.outputs.length > 0) rememberCompletedExport(req.naming, res.outputs.length)
+    return res
+  })
   return listJobs()
 })
+ipcMain.handle('queue:stop', (): QueueJobView[] => stopQueue())
 
 // IPC: remembered settings.
 ipcMain.handle('settings:get', (): AppSettings => getSettings())
@@ -165,10 +184,36 @@ ipcMain.handle('shell:showItem', (_e, path: string): void => {
   if (path) shell.showItemInFolder(path)
 })
 
+// One app instance only: a second one could reclaim this one's episode
+// placeholders (they look like stale leftovers to another process).
+if (!app.requestSingleInstanceLock()) app.exit(0)
+app.on('second-instance', () => {
+  const win = BrowserWindow.getAllWindows()[0]
+  if (!win) return
+  if (win.isMinimized()) win.restore()
+  win.focus()
+})
+
 app.whenReady().then(() => {
   createWindow()
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()
+  })
+})
+
+// On quit: stop all ffmpeg work, wait until the exports removed their
+// unfinished episode files, then quit for real.
+let readyToQuit = false
+app.on('before-quit', (event) => {
+  if (readyToQuit) return
+  event.preventDefault()
+  exportAbort?.abort()
+  stopQueue()
+  cancelScan()
+  killAllFfmpeg()
+  void waitForExports().finally(() => {
+    readyToQuit = true
+    app.quit()
   })
 })
 

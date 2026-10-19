@@ -4,7 +4,8 @@ import {
   sanitizeFilename,
   episodeFileName,
   seasonFolderName,
-  episodeRelPath
+  episodeRelPath,
+  nextStartEpisode
 } from '../shared/naming'
 
 test('sanitizeFilename keeps spaces/hyphens, drops illegal chars', () => {
@@ -35,4 +36,10 @@ test('seasonFolderName and episodeRelPath', () => {
 test('episodeFileName falls back to "Show" when name is empty/illegal', () => {
   const naming = { showName: '???', season: 1, startEpisode: 1, outputDir: '/out' }
   assert.equal(episodeFileName(naming, 0), 'Show - S01E01.mp4')
+})
+
+test('nextStartEpisode continues numbering after the exported episodes', () => {
+  assert.equal(nextStartEpisode(1, 4), 5)
+  assert.equal(nextStartEpisode(9, 1), 10)
+  assert.equal(nextStartEpisode(3, 0), 3)
 })
