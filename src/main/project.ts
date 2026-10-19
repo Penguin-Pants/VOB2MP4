@@ -4,8 +4,10 @@ import { dirname, join } from 'path'
 import { lastDir, rememberDir } from './settings'
 import { sanitizeFilename } from '../shared/naming'
 import type { ProjectFile } from '../shared/types'
+import { plainReason } from '../shared/userError'
 
 const EXT = 'v2m'
+const NOT_A_PROJECT = 'This file is not a VOB2MP4 project, or it is damaged. Choose a .v2m file that VOB2MP4 saved.'
 
 /** Show a save dialog and write the project as JSON. Returns the saved path or null. */
 export async function saveProject(project: ProjectFile): Promise<{ ok: boolean; path?: string; error?: string }> {
@@ -21,7 +23,7 @@ export async function saveProject(project: ProjectFile): Promise<{ ok: boolean; 
     await writeFile(res.filePath, JSON.stringify(project, null, 2), 'utf8')
     return { ok: true, path: res.filePath }
   } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : String(e) }
+    return { ok: false, error: plainReason(e) }
   }
 }
 
@@ -37,9 +39,9 @@ export async function openProject(): Promise<{ ok: boolean; project?: ProjectFil
   rememberDir('project', dirname(res.filePaths[0]))
   try {
     const data = JSON.parse(await readFile(res.filePaths[0], 'utf8')) as ProjectFile
-    if (data.version !== 1 || !data.source) return { ok: false, error: 'Not a valid project file.' }
+    if (data.version !== 1 || !data.source) return { ok: false, error: NOT_A_PROJECT }
     return { ok: true, project: data }
   } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : String(e) }
+    return { ok: false, error: e instanceof SyntaxError ? NOT_A_PROJECT : plainReason(e) }
   }
 }

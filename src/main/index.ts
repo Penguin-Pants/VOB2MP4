@@ -9,6 +9,7 @@ import { addJob, clearFinished, listJobs, removeJob, runQueue, stopQueue } from 
 import { getSettings, lastDir, rememberCompletedExport, rememberDir, updateSettings } from './settings'
 import { openProject, saveProject } from './project'
 import { cancelScan, scanBlackFrames } from './scan'
+import { plainReason } from '../shared/userError'
 import type {
   AppSettings,
   ExportRequest,
@@ -119,7 +120,7 @@ ipcMain.handle('input:inspect', async (_e, paths: string[]): Promise<InspectResp
     const input = await inspectPaths(paths)
     return { ok: true, input }
   } catch (err) {
-    return { ok: false, error: err instanceof Error ? err.message : String(err) }
+    return { ok: false, error: plainReason(err) }
   }
 })
 
@@ -156,7 +157,7 @@ ipcMain.handle('dialog:chooseOutputDir', async (): Promise<string | null> => {
 let exportAbort: AbortController | null = null
 ipcMain.handle('export:run', async (e, req: ExportRequest): Promise<ExportResult> => {
   // One direct export at a time, so Cancel always reaches the running one.
-  if (exportAbort) return { ok: false, outputs: [], error: 'An export is already running.' }
+  if (exportAbort) return { ok: false, outputs: [], error: 'Another export is still running. Wait for it to finish or cancel it, then try again.' }
   const abort = new AbortController()
   exportAbort = abort
   try {

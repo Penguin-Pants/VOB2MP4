@@ -1,6 +1,7 @@
 import { runFfmpeg, type FfmpegRun } from './ffmpeg'
 import { resolveInput } from './export'
 import type { PreviewSource, ScanResult } from '../shared/types'
+import { plainReason, videoReason } from '../shared/userError'
 
 export interface BlackInterval {
   start: number
@@ -48,12 +49,6 @@ export function cancelScan(): void {
   }
 }
 
-/** Last non-empty stderr line: the actual error, after ffmpeg's info output. */
-function lastLine(text: string): string {
-  const lines = text.split(/\r?\n/).filter((l) => l.trim() !== '')
-  return lines.length > 0 ? lines[lines.length - 1].trim() : ''
-}
-
 /**
  * Scan a program for black frames and return candidate episode split points.
  * Decodes the whole program (no encoding) so it's slow but progress is
@@ -97,10 +92,10 @@ export async function scanBlackFrames(
     const { code, stderr } = await run.done
     const splits = candidateSplitsFromBlack(parseBlackIntervals(stderr), source.durationSec)
     if (scan.cancelled) return { ok: true, splits, cancelled: true }
-    if (code !== 0) return { ok: false, error: lastLine(stderr) || `ffmpeg exit ${code}` }
+    if (code !== 0) return { ok: false, error: videoReason(stderr) }
     return { ok: true, splits, cancelled: false }
   } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : String(e) }
+    return { ok: false, error: plainReason(e) }
   } finally {
     if (currentScan === scan) currentScan = null
     // The temp concat list is disposable: a failed delete must not turn the

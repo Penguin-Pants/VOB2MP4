@@ -90,7 +90,8 @@ test('scanBlackFrames reports an ffmpeg failure instead of "no breaks"', needsFf
   const res = await scanBlackFrames(fileSource(join(tmpdir(), 'vob2mp4-missing.mkv'), 7), 0.4, () => undefined)
   assert.equal(res.ok, false)
   if (res.ok) return
-  assert.ok(res.error.length > 0)
+  assert.match(res.error, /The file or folder is not there\./)
+  assert.doesNotMatch(res.error, /vob2mp4-missing|ffmpeg|No such file/i)
 })
 
 test('scanBlackFrames reports a cancelled scan', needsFfmpeg, async () => {

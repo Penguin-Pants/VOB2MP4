@@ -1,6 +1,7 @@
 import { runFfmpeg, type FfmpegRun } from './ffmpeg'
 import { dvdInput } from './export'
 import type { FilmstripThumb, FrameResult, PreviewSource } from '../shared/types'
+import { UserError, plainReason, videoReason } from '../shared/userError'
 
 const PREVIEW_HEIGHT = 480
 const THUMB_HEIGHT = 120
@@ -52,7 +53,7 @@ class LatestOnly {
       const { code, stdout, stderr } = await run.done
       if (!current()) throw new Error(SUPERSEDED)
       if (code === 0 && stdout.length > 0) return stdout
-      throw new Error(stderr.trim() || `ffmpeg exit ${code}`)
+      throw new UserError(videoReason(stderr))
     } finally {
       if (this.run === run) this.run = null
     }
@@ -138,7 +139,9 @@ export async function extractFrame(source: PreviewSource, timeSec: number): Prom
     const buf = await extractBuf(frameRequests, current, source, timeSec, PREVIEW_HEIGHT)
     return { ok: true, dataUrl: toDataUrl(buf), timeSec }
   } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : String(e) }
+    // The renderer drops superseded replies, so that text is never shown.
+    const superseded = e instanceof Error && e.message === SUPERSEDED
+    return { ok: false, error: superseded ? SUPERSEDED : plainReason(e) }
   }
 }
 

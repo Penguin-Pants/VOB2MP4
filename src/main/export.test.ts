@@ -98,7 +98,9 @@ test('runExport resolves with an error when the season folder cannot be created'
     const res = await runExport(exportRequest(source, blocker), () => undefined)
     assert.equal(res.ok, false)
     assert.deepEqual(res.outputs, [])
-    assert.ok(res.error && res.error.length > 0)
+    // A plain sentence: no system error code or path reaches the user.
+    assert.match(res.error ?? '', /^Export stopped\. /)
+    assert.doesNotMatch(res.error ?? '', /\bE[A-Z]{3,}\b|not-a-dir/)
   } finally {
     await rm(dir, { recursive: true, force: true })
   }
@@ -153,6 +155,25 @@ test(
     }
   }
 )
+
+test('a failed episode names the episode and hides the engine output', needsFfmpeg, async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'vob2mp4-test-'))
+  try {
+    const source: PreviewSource = {
+      ...base,
+      kind: 'files',
+      durationSec: 4,
+      files: [join(dir, 'gone.vob')],
+      fileDurations: [4]
+    }
+    const res = await runExport(exportRequest(source, dir), () => undefined)
+    assert.equal(res.ok, false)
+    assert.match(res.error ?? '', /^Episode 1 \(.+S01E01\.mp4\) could not be converted\. The file or folder is not there\./)
+    assert.doesNotMatch(res.error ?? '', /gone\.vob|ffmpeg|No such file/i)
+  } finally {
+    await rm(dir, { recursive: true, force: true })
+  }
+})
 
 test('runExport stops and removes the episode file when cancelled', needsFfmpeg, async () => {
   const dir = await mkdtemp(join(tmpdir(), 'vob2mp4-test-'))

@@ -6,6 +6,7 @@ import { buildExportArgs } from './exportArgs'
 import { segmentsFromSplits } from '../shared/segments'
 import { episodeFileName, seasonFolderName } from '../shared/naming'
 import type { ExportProgress, ExportRequest, ExportResult, PreviewSource } from '../shared/types'
+import { UserError, plainReason, videoReason } from '../shared/userError'
 
 /** Escape a path for a concat-demuxer list file entry. */
 function concatLine(file: string): string {
@@ -46,7 +47,7 @@ export async function resolveInput(
   }
 }
 
-const CANCELLED = 'Export cancelled.'
+const CANCELLED = 'Export cancelled. Episodes that were already finished are kept.'
 
 /** Episode files reserved by exports running in this process (by reservationKey). */
 const liveReservations = new Set<string>()
@@ -120,7 +121,7 @@ async function runOne(
   try {
     const { code, stderr } = await run.done
     // A run that finished before the abort landed keeps its episode.
-    if (code !== 0) throw new Error(signal?.aborted ? CANCELLED : stderr.trim() || `ffmpeg exit ${code}`)
+    if (code !== 0) throw new UserError(signal?.aborted ? CANCELLED : videoReason(stderr))
   } finally {
     signal?.removeEventListener('abort', abort)
   }
@@ -157,7 +158,9 @@ async function exportProgram(
 ): Promise<ExportResult> {
   const { source, splitPoints, options, naming } = req
   const segments = segmentsFromSplits(splitPoints, source.durationSec)
-  if (segments.length === 0) return { ok: false, outputs: [], error: 'No episodes to export.' }
+  if (segments.length === 0) {
+    return { ok: false, outputs: [], error: 'There are no episodes to export. Load a program that has a length, then try again.' }
+  }
 
   const seasonDir = join(naming.outputDir, seasonFolderName(naming.season))
   const outputs: string[] = []
@@ -185,7 +188,7 @@ async function exportProgram(
         return {
           ok: false,
           outputs,
-          error: `${name} already exists in ${seasonDir}. Change the start episode or move the file.`
+          error: `${name} already exists in ${seasonDir}. Change “Start at episode” or move the existing file, then try again.`
         }
       }
       reserved.push(output)
@@ -225,7 +228,7 @@ async function exportProgram(
           signal
         )
       } catch (e) {
-        const error = e instanceof Error ? e.message : String(e)
+        const error = plainReason(e)
         onProgress({
           episodeIndex: i,
           totalEpisodes: segments.length,
@@ -235,7 +238,7 @@ async function exportProgram(
           error
         })
         if (signal?.aborted) return { ok: false, outputs, error: CANCELLED }
-        return { ok: false, outputs, error: `Episode ${i + 1} (${name}) failed: ${error}` }
+        return { ok: false, outputs, error: `Episode ${i + 1} (${name}) could not be converted. ${error}` }
       }
       await publish(partPath(output), output)
       outputs.push(output)
@@ -248,7 +251,7 @@ async function exportProgram(
       })
     }
   } catch (e) {
-    return { ok: false, outputs, error: e instanceof Error ? e.message : String(e) }
+    return { ok: false, outputs, error: `Export stopped. ${plainReason(e)}` }
   } finally {
     // Remove every reserved episode that did not finish (failure, clash,
     // cancel or an early error), so no empty or truncated file is left for

@@ -3,6 +3,7 @@ import { join, basename as pathBasename } from 'path'
 import { probeFile } from './ffprobe'
 import { readDvdTitles } from './dvd'
 import { groupVobFiles, groupMediaFiles, isMediaFile, isVobFile, looksLikeVideoTs } from './input'
+import { UserError } from '../shared/userError'
 import type { InspectedInput, ProbeResult, VobGroupInspected, VobGroup } from '../shared/types'
 
 /** List the VOB and standalone-media files directly inside a directory. */
@@ -80,7 +81,7 @@ async function inspectGroup(group: VobGroup): Promise<VobGroupInspected> {
  * (joined VOB parts and/or standalone media files like .m4v/.mp4).
  */
 export async function inspectPaths(paths: string[]): Promise<InspectedInput> {
-  if (paths.length === 0) throw new Error('Nothing selected.')
+  if (paths.length === 0) throw new UserError('No file or folder was selected. Choose a folder or files to open.')
 
   // Single directory → a VIDEO_TS disc, or a folder of video files.
   if (paths.length === 1) {
@@ -96,13 +97,19 @@ export async function inspectPaths(paths: string[]): Promise<InspectedInput> {
         // Fall back to treating the folder's files as programs.
         const { vobs, media } = await listDirFiles(videoTs)
         const groups = buildGroups(vobs, media)
-        if (groups.length === 0) throw new Error('No video files found in that folder.')
+        if (groups.length === 0) {
+          throw new UserError(
+            'That VIDEO_TS folder has no titles or video files that VOB2MP4 can read. Choose another disc folder.'
+          )
+        }
         return { kind: 'vob_files', groups: await Promise.all(groups.map(inspectGroup)) }
       }
       const { vobs, media } = await listDirFiles(only)
       const groups = buildGroups(vobs, media)
       if (groups.length === 0) {
-        throw new Error('No video files or VIDEO_TS found in that folder.')
+        throw new UserError(
+          'That folder has no VIDEO_TS folder and no video files. Choose the disc folder, or use “Open VOB file(s)” or “Open video file(s)”.'
+        )
       }
       return { kind: 'vob_files', groups: await Promise.all(groups.map(inspectGroup)) }
     }
@@ -125,7 +132,11 @@ export async function inspectPaths(paths: string[]): Promise<InspectedInput> {
     }
   }
   const groups = buildGroups(vobs, media)
-  if (groups.length === 0) throw new Error('No supported video files in the selection.')
+  if (groups.length === 0) {
+    throw new UserError(
+      'None of the selected files is a video that VOB2MP4 can open. Select .VOB files or video files such as .mp4, .m4v or .mkv.'
+    )
+  }
 
   return { kind: 'vob_files', groups: await Promise.all(groups.map(inspectGroup)) }
 }
